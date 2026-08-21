@@ -85,15 +85,15 @@ export function layer(options: {
             const recorded = yield* existing(input.id);
             if (recorded) return recorded;
           }
-          const imageName = GatewayImage.select(
+          const requestedImage = GatewayImage.candidate(
             input.location?.directory,
             options.root,
           );
-          if (!imageName)
-            return yield* Effect.fail(
-              new Error("Invalid gateway image selector"),
-            );
-          const image = yield* registry.findImage(imageName);
+          const requested = yield* registry.findImage(requestedImage);
+          const imageName = requested
+            ? requestedImage
+            : GatewayImage.DefaultName;
+          const image = requested ?? (yield* registry.findImage(imageName));
           if (!image)
             return yield* new GatewayRegistry.ImageNotFoundError({
               name: imageName,

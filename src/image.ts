@@ -17,6 +17,14 @@ export function select(directory: string | undefined, root: string) {
   return relative;
 }
 
+export function candidate(directory: string | undefined, root: string) {
+  const selected = select(directory, root);
+  if (selected) return selected;
+  if (!directory) return DefaultName;
+  const name = path.basename(path.resolve(directory));
+  return validName(name) ? name : DefaultName;
+}
+
 export function directory(name: string, root: string) {
   return name === DefaultName ? path.resolve(root) : path.join(root, name);
 }

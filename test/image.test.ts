@@ -15,4 +15,7 @@ test("rejects invalid and nested image selectors", () => {
   expect(GatewayImage.select(`${root}/one/two`, root)).toBeUndefined();
   expect(GatewayImage.select("/outside", root)).toBeUndefined();
   expect(GatewayImage.validName("a".repeat(65))).toBe(false);
+  expect(
+    GatewayImage.candidate("/root/projects/opencode-gateway/default", root),
+  ).toBe("default");
 });

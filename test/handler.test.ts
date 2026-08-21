@@ -428,7 +428,7 @@ describe("GatewayHandler", () => {
           "http://gateway.test/api/location?location%5Bdirectory%5D=%2Fpersist%2Fproject%2Fmissing",
         ),
       );
-      expect(missingImage.status).toBe(404);
+      expect(missingImage.status).toBe(200);
       expect(requests.count).toBe(0);
       void upstream;
     } finally {

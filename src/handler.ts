@@ -55,18 +55,14 @@ export function handle(request: Request, options: Options) {
       const requested =
         url.searchParams.get("location[directory]") ??
         url.searchParams.get("location.directory");
-      const name = GatewayImage.select(requested ?? undefined, root);
-      if (!name)
-        return Response.json(
-          { code: "invalid_image", message: "Invalid gateway image selector" },
-          { status: 400 },
-        );
+      const requestedName = GatewayImage.candidate(
+        requested ?? undefined,
+        root,
+      );
       const registry = yield* GatewayRegistry.Service;
-      if (!(yield* registry.findImage(name)))
-        return Response.json(
-          { code: "image_not_found", name },
-          { status: 404 },
-        );
+      const name = (yield* registry.findImage(requestedName))
+        ? requestedName
+        : GatewayImage.DefaultName;
       const directory = GatewayImage.directory(name, root);
       return Response.json({
         directory,
