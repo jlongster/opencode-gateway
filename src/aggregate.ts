@@ -76,8 +76,22 @@ export const layer = Layer.effect(
           ),
         { concurrency: 8 },
       );
-      const found = responses.flatMap((response) =>
+      const discovered = responses.flatMap((response) =>
         response._tag === "Some" ? response.value : [],
+      );
+      const grouped = Map.groupBy(discovered, (session) => session.id);
+      const found = yield* Effect.forEach([...grouped.values()], (sessions) =>
+        registry
+          .findSession(sessions[0].id)
+          .pipe(
+            Effect.map(
+              (binding) =>
+                sessions.find(
+                  (session) =>
+                    session.location.workspaceID === binding?.workspaceID,
+                ) ?? sessions[0],
+            ),
+          ),
       );
       yield* Effect.forEach(
         found,

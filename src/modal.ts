@@ -44,6 +44,7 @@ export interface Interface {
     readonly upstreamPassword: string;
     readonly credentials: Snapshot;
     readonly imageID?: string;
+    readonly fresh: boolean;
   }) => Effect.Effect<{ readonly id: string }, ModalError>;
   readonly flushFilesystem: (
     sandboxID: string,
@@ -231,6 +232,7 @@ export function layer(options: Options) {
         readonly upstreamPassword: string;
         readonly credentials: Snapshot;
         readonly imageID?: string;
+        readonly fresh: boolean;
       }) {
         const started = Date.now();
         yield* Effect.logInfo("creating Modal sandbox", {
@@ -255,7 +257,11 @@ export function layer(options: Options) {
           Effect.gen(function* () {
             const sandbox = yield* request("sandbox.create", () =>
               client.sandboxes.create(app, image, {
-                command: ["bash", "-lc", bootstrap({ root: input.root })],
+                command: [
+                  "bash",
+                  "-lc",
+                  bootstrap({ root: input.root, fresh: input.fresh }),
+                ],
                 env: {
                   OPENCODE_PASSWORD: input.upstreamPassword,
                   OPENCODE_CONFIG_CONTENT: JSON.stringify({
@@ -385,10 +391,15 @@ export function layer(options: Options) {
   );
 }
 
-function bootstrap(input: { readonly root: string }) {
+function bootstrap(input: { readonly root: string; readonly fresh: boolean }) {
   return [
     "set -euo pipefail",
     "rm -rf /tmp/opencode-gateway-tools",
+    ...(input.fresh
+      ? [
+          'rm -f "$HOME/.local/share/opencode/opencode.db" "$HOME/.local/share/opencode/opencode.db-shm" "$HOME/.local/share/opencode/opencode.db-wal"',
+        ]
+      : []),
     "cat > /tmp/opencode-credentials.json",
     `cd ${quote(input.root)}`,
     "opencode2 serve --hostname 127.0.0.1 --port 4095 &",

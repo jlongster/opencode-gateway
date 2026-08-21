@@ -113,6 +113,7 @@ export function layer(options: {
               upstreamPassword: options.upstreamPassword,
               credentials: credentials.snapshot,
               imageID: image.imageID,
+              fresh: true,
             })
             .pipe(Effect.onError(() => registry.removeWorkspace(workspace.id)));
           return yield* Effect.gen(function* () {
@@ -195,6 +196,7 @@ export function layer(options: {
               upstreamPassword: options.upstreamPassword,
               credentials: credentials.snapshot,
               imageID: selected.image.imageID,
+              fresh: false,
             });
             yield* registry.registerSandbox({
               id: sandbox.id,
