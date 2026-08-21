@@ -144,6 +144,13 @@ export function layer(options: Options) {
         readonly upstreamPassword: string;
         readonly credentials: Snapshot;
       }) {
+        const started = Date.now();
+        yield* Effect.logInfo("creating Modal sandbox", {
+          workspaceID: input.workspaceID,
+          generation: input.generation,
+          image: options.image ?? "oven/bun:1.3.14",
+          opencodeVersion: options.opencodeVersion ?? "dev",
+        });
         const image = client.images
           .fromRegistry(options.image ?? "oven/bun:1.3.14")
           .dockerfileCommands([
@@ -152,35 +159,43 @@ export function layer(options: Options) {
           ]);
         const retained = yield* Ref.make(false);
         return yield* Effect.acquireUseRelease(
-          request("sandbox.create", () =>
-            client.sandboxes.create(app, image, {
-              command: ["bash", "-lc", bootstrap({ root: input.root })],
-              env: {
-                OPENCODE_PASSWORD: input.upstreamPassword,
-                OPENCODE_DB: "/persist/opencode/opencode.db",
-                OPENCODE_CONFIG_DIR: "/persist/opencode/config",
-                XDG_DATA_HOME: "/persist/opencode/data",
-                XDG_STATE_HOME: "/persist/opencode/state",
-                XDG_CACHE_HOME: "/persist/opencode/cache",
-              },
-              volumes: {
-                "/persist": volume.withMountOptions({
-                  subPath: input.volumeSubpath,
-                }),
-              },
-              workdir: "/persist",
-              timeoutMs: options.timeoutMs ?? 24 * 60 * 60 * 1000,
-              memoryMiB: 1024,
-              memoryLimitMiB: 1024,
-              experimentalOptions: { vm_runtime: true },
-              readinessProbe: Probe.withTcp(4096, { intervalMs: 250 }),
-              tags: {
-                [GatewayTag]: input.installationID,
-                [WorkspaceTag]: input.workspaceID,
-                [GenerationTag]: String(input.generation),
-              },
-            }),
-          ),
+          Effect.gen(function* () {
+            const sandbox = yield* request("sandbox.create", () =>
+              client.sandboxes.create(app, image, {
+                command: ["bash", "-lc", bootstrap({ root: input.root })],
+                env: {
+                  OPENCODE_PASSWORD: input.upstreamPassword,
+                  OPENCODE_DB: "/persist/opencode/opencode.db",
+                  OPENCODE_CONFIG_DIR: "/persist/opencode/config",
+                  XDG_DATA_HOME: "/persist/opencode/data",
+                  XDG_STATE_HOME: "/persist/opencode/state",
+                  XDG_CACHE_HOME: "/persist/opencode/cache",
+                },
+                volumes: {
+                  "/persist": volume.withMountOptions({
+                    subPath: input.volumeSubpath,
+                  }),
+                },
+                workdir: "/persist",
+                timeoutMs: options.timeoutMs ?? 24 * 60 * 60 * 1000,
+                memoryMiB: 1024,
+                memoryLimitMiB: 1024,
+                experimentalOptions: { vm_runtime: true },
+                readinessProbe: Probe.withTcp(4096, { intervalMs: 250 }),
+                tags: {
+                  [GatewayTag]: input.installationID,
+                  [WorkspaceTag]: input.workspaceID,
+                  [GenerationTag]: String(input.generation),
+                },
+              }),
+            );
+            yield* Effect.logInfo("Modal sandbox allocated", {
+              workspaceID: input.workspaceID,
+              sandboxID: sandbox.sandboxId,
+              elapsedMs: Date.now() - started,
+            });
+            return sandbox;
+          }),
           (sandbox) =>
             Effect.gen(function* () {
               yield* request("sandbox.writeCredentialImporter", () =>
@@ -195,6 +210,11 @@ export function layer(options: Options) {
               yield* request("sandbox.closeCredentialInput", () =>
                 sandbox.stdin.close(),
               );
+              yield* Effect.logInfo("waiting for Modal sandbox readiness", {
+                workspaceID: input.workspaceID,
+                sandboxID: sandbox.sandboxId,
+                elapsedMs: Date.now() - started,
+              });
               yield* request("sandbox.waitUntilReady", () =>
                 sandbox.waitUntilReady(),
               ).pipe(
@@ -223,6 +243,11 @@ export function layer(options: Options) {
                 ),
               );
               yield* Ref.set(retained, true);
+              yield* Effect.logInfo("Modal sandbox creation finished", {
+                workspaceID: input.workspaceID,
+                sandboxID: sandbox.sandboxId,
+                durationMs: Date.now() - started,
+              });
               return { id: sandbox.sandboxId };
             }),
           (sandbox) =>
@@ -235,6 +260,14 @@ export function layer(options: Options) {
                     ).pipe(Effect.ignore),
               ),
             ),
+        ).pipe(
+          Effect.tapError((error) =>
+            Effect.logError("Modal sandbox creation failed", {
+              workspaceID: input.workspaceID,
+              durationMs: Date.now() - started,
+              error,
+            }),
+          ),
         );
       });
 
