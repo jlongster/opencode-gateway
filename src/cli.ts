@@ -18,11 +18,7 @@ const args = parseArgs({
     environment: { type: "string" },
     root: { type: "string", default: "/persist/project" },
     image: { type: "string", default: "oven/bun:1.3.14" },
-    repository: {
-      type: "string",
-      default: "https://github.com/anomalyco/opencode.git",
-    },
-    branch: { type: "string", default: "v2" },
+    "opencode-version": { type: "string", default: "dev" },
   },
 });
 
@@ -62,8 +58,7 @@ const program = Effect.gen(function* () {
       volume: args.values.volume,
       environment: args.values.environment,
       image: args.values.image,
-      repository: args.values.repository,
-      branch: args.values.branch,
+      opencodeVersion: args.values["opencode-version"],
     },
   });
   yield* Effect.logInfo("OpenCode gateway listening", {

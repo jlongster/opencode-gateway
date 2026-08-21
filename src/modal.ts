@@ -58,8 +58,7 @@ export interface Options {
   readonly tokenID?: string;
   readonly tokenSecret?: string;
   readonly image?: string;
-  readonly repository?: string;
-  readonly branch?: string;
+  readonly opencodeVersion?: string;
   readonly timeoutMs?: number;
 }
 
@@ -149,9 +148,7 @@ export function layer(options: Options) {
           .fromRegistry(options.image ?? "oven/bun:1.3.14")
           .dockerfileCommands([
             "USER root",
-            "RUN apt-get update && apt-get install -y git ca-certificates python3 build-essential",
-            `RUN git clone --depth 1 --branch ${quote(options.branch ?? "v2")} ${quote(options.repository ?? "https://github.com/anomalyco/opencode.git")} /opt/opencode`,
-            "RUN cd /opt/opencode && bun install",
+            `RUN bun install -g @opencode-ai/cli@${quote(options.opencodeVersion ?? "dev")} --trust`,
           ]);
         const retained = yield* Ref.make(false);
         return yield* Effect.acquireUseRelease(
@@ -255,15 +252,16 @@ function bootstrap(input: { readonly root: string }) {
     "set -euo pipefail",
     "cat > /tmp/opencode-credentials.json",
     `mkdir -p ${quote(input.root)} /persist/opencode/{config,data,state,cache}`,
+    'cp "$(command -v opencode2)" /tmp/opencode2 && chmod +x /tmp/opencode2',
     `cd ${quote(input.root)}`,
-    "bun run --cwd /opt/opencode/packages/cli --conditions=browser src/index.ts serve --hostname 127.0.0.1 --port 4095 &",
+    "/tmp/opencode2 serve --hostname 127.0.0.1 --port 4095 &",
     "bootstrap_pid=$!",
     `bun -e ${quote(healthWait)}`,
     'kill -TERM "$bootstrap_pid"',
     'wait "$bootstrap_pid" || true',
     "bun /tmp/opencode-credential-import.ts /tmp/opencode-credentials.json",
     "rm -f /tmp/opencode-credential-import.ts /tmp/opencode-credentials.json",
-    "exec bun run --cwd /opt/opencode/packages/cli --conditions=browser src/index.ts serve --hostname 0.0.0.0 --port 4096",
+    "exec /tmp/opencode2 serve --hostname 0.0.0.0 --port 4096",
   ].join("\n");
 }
 
