@@ -183,7 +183,10 @@ export function layer(options: Options) {
           request("sandbox.snapshotFilesystem", async () => {
             const sandbox = await client.sandboxes.fromId(sandboxID);
             try {
-              const image = await sandbox.snapshotFilesystem({ ttlMs: null });
+              const image = await sandbox.snapshotFilesystem({
+                ttlMs: null,
+                timeoutMs: 10 * 60 * 1000,
+              });
               return image.imageId;
             } finally {
               sandbox.detach();
@@ -442,7 +445,7 @@ export default Plugin.define({
         execute: async ({ name }, call) => {
           await mkdir(directory, { recursive: true })
           const file = directory + "/" + encodeURIComponent(call.id) + ".json"
-          for (let attempt = 0; attempt < 600; attempt++) {
+          for (let attempt = 0; attempt < 3_000; attempt++) {
             const text = await readFile(file, "utf8").catch(() => undefined)
             if (text !== undefined) {
               await rm(file, { force: true })
