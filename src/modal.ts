@@ -295,6 +295,7 @@ export function layer(options: Options) {
                 },
                 workdir: input.root,
                 timeoutMs: options.timeoutMs ?? 24 * 60 * 60 * 1000,
+                idleTimeoutMs: 60_000,
                 memoryMiB: 1024,
                 memoryLimitMiB: 1024,
                 experimentalOptions: { vm_runtime: true },
