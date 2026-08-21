@@ -92,6 +92,16 @@ export function handle(request: Request, options: Options) {
         project: { id: "global", directory: root, canonical: root },
       });
     }
+    if (decision.type === "empty-global-forms") {
+      const root = options.root ?? "/root";
+      return Response.json({
+        location: {
+          directory: root,
+          project: { id: "global", directory: root, canonical: root },
+        },
+        data: [],
+      });
+    }
     if (decision.type === "sessions") {
       const input = sessionListInput(new URL(request.url));
       if (input instanceof Response) return input;
@@ -201,6 +211,7 @@ function resolveWorkspace(
         | "default-location"
         | "images"
         | "image"
+        | "empty-global-forms"
         | "sessions"
         | "active-sessions"
         | "events"

@@ -8,6 +8,7 @@ export type Decision =
   | { readonly type: "default-location" }
   | { readonly type: "images" }
   | { readonly type: "image"; readonly name: string }
+  | { readonly type: "empty-global-forms" }
   | { readonly type: "sessions" }
   | { readonly type: "active-sessions" }
   | { readonly type: "events" }
@@ -81,6 +82,12 @@ export function classify(request: Request): Decision {
 
   if (/^\/api\/session\/global\/form(?:\/|$)/.test(url.pathname)) {
     const workspaceID = workspace(request, url);
+    if (
+      !workspaceID &&
+      method === "GET" &&
+      url.pathname === "/api/session/global/form"
+    )
+      return { type: "empty-global-forms" };
     return workspaceID
       ? { type: "workspace", workspaceID }
       : {
