@@ -401,34 +401,24 @@ describe("GatewayHandler", () => {
       );
       expect(location.status).toBe(200);
       expect(await location.json()).toEqual({
-        directory: "/persist/project",
+        directory: "/root",
         project: {
           id: "global",
-          directory: "/persist/project",
-          canonical: "/persist/project",
+          directory: "/root",
+          canonical: "/root",
         },
       });
       const images = await handle(
-        authenticated("http://gateway.test/api/fs/list"),
+        authenticated("http://gateway.test/api/gateway/image"),
       );
       expect(images.status).toBe(200);
       expect(await images.json()).toEqual({
-        location: {
-          directory: "/persist/project",
-          project: {
-            id: "global",
-            directory: "/persist/project",
-            canonical: "/persist/project",
-          },
-        },
-        data: [{ path: "default", type: "directory" }],
+        data: [{ name: "default" }],
       });
       const missingImage = await handle(
-        authenticated(
-          "http://gateway.test/api/location?location%5Bdirectory%5D=%2Fpersist%2Fproject%2Fmissing",
-        ),
+        authenticated("http://gateway.test/api/gateway/image/missing"),
       );
-      expect(missingImage.status).toBe(200);
+      expect(missingImage.status).toBe(404);
       expect(requests.count).toBe(0);
       void upstream;
     } finally {
