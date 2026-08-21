@@ -52,6 +52,52 @@ const fromClient = Layer.effect(
       )
     `;
     yield* sql`
+      CREATE TABLE IF NOT EXISTS gateway_image (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('default', 'snapshot')),
+        image_id TEXT,
+        source_workspace_id TEXT REFERENCES workspace(id) ON DELETE SET NULL,
+        source_sandbox_id TEXT,
+        source_generation INTEGER,
+        time_created INTEGER NOT NULL,
+        CHECK (
+          (kind = 'default' AND image_id IS NULL) OR
+          (kind = 'snapshot' AND image_id IS NOT NULL)
+        )
+      )
+    `;
+    yield* sql`
+      INSERT OR IGNORE INTO gateway_image (name, kind, time_created)
+      VALUES ('default', 'default', ${Date.now()})
+    `;
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS workspace_image (
+        workspace_id TEXT PRIMARY KEY REFERENCES workspace(id) ON DELETE CASCADE,
+        image_name TEXT NOT NULL REFERENCES gateway_image(name),
+        time_updated INTEGER NOT NULL
+      )
+    `;
+    yield* sql`
+      INSERT OR IGNORE INTO workspace_image (workspace_id, image_name, time_updated)
+      SELECT id, 'default', time_updated FROM workspace
+    `;
+    yield* sql`
+      CREATE TABLE IF NOT EXISTS gateway_tool_call (
+        sandbox_id TEXT NOT NULL REFERENCES sandbox(id) ON DELETE CASCADE,
+        tool_call_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL,
+        assistant_message_id TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        input TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('requested', 'running', 'succeeded', 'failed')),
+        result TEXT,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        PRIMARY KEY (sandbox_id, tool_call_id)
+      )
+    `;
+    yield* sql`
       CREATE TABLE IF NOT EXISTS project_binding (
         workspace_id TEXT PRIMARY KEY REFERENCES workspace(id) ON DELETE CASCADE,
         upstream_project_id TEXT NOT NULL,

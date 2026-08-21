@@ -13,6 +13,7 @@ import { GatewayModal } from "./modal.js";
 import { GatewayReconcile } from "./reconcile.js";
 import { GatewayRegistry } from "./registry.js";
 import { GatewayProvision } from "./provision.js";
+import { GatewayTools } from "./tools.js";
 
 export interface Options {
   readonly hostname?: string;
@@ -50,15 +51,23 @@ export const start = Effect.fn("GatewayProcess.start")(function* (
   }).pipe(Layer.provide(dependencies));
   const upstream = Layer.merge(dependencies, backend);
   const aggregate = GatewayAggregate.layer.pipe(Layer.provide(upstream));
+  const tools = GatewayTools.layer.pipe(Layer.provide(upstream));
+  const eventDependencies = Layer.merge(upstream, tools);
   const events = GatewayEvents.layer({ root: options.root }).pipe(
-    Layer.provide(upstream),
+    Layer.provide(eventDependencies),
   );
-  const provisionDependencies = Layer.mergeAll(upstream, events);
+  const provisionDependencies = Layer.mergeAll(upstream, tools, events);
   const provision = GatewayProvision.layer({
     root: options.root ?? "/persist/project",
     upstreamPassword,
   }).pipe(Layer.provide(provisionDependencies));
-  const services = Layer.mergeAll(upstream, aggregate, events, provision);
+  const services = Layer.mergeAll(
+    upstream,
+    aggregate,
+    tools,
+    events,
+    provision,
+  );
   const startup = GatewayReconcile.run().pipe(
     Effect.andThen(
       Effect.gen(function* () {
@@ -80,6 +89,7 @@ export function serve<E, R>(
     | GatewayEvents.Service
     | GatewayControl.Service
     | GatewayProvision.Service
+    | GatewayTools.Service
     | R,
     E
   >,
@@ -92,6 +102,7 @@ export function serve<E, R>(
     | GatewayEvents.Service
     | GatewayControl.Service
     | GatewayProvision.Service
+    | GatewayTools.Service
     | R
   > = Effect.void,
 ) {

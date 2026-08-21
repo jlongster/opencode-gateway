@@ -2,14 +2,17 @@ export * as GatewayProvision from "./provision.js";
 
 import { Agent } from "@opencode-ai/schema/agent";
 import { Model } from "@opencode-ai/schema/model";
+import { Location } from "@opencode-ai/schema/location";
 import { Session } from "@opencode-ai/schema/session";
+import { Workspace } from "@opencode-ai/schema/workspace";
 import { AbsolutePath } from "@opencode-ai/schema/schema";
-import { Context, DateTime, Effect, Layer, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Schema, Semaphore } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { GatewayBackend } from "./backend.js";
 import { GatewayClient } from "./client.js";
 import { GatewayCredentials } from "./credentials.js";
 import { GatewayEvents } from "./events.js";
+import { GatewayImage } from "./image.js";
 import { GatewayModal } from "./modal.js";
 import { GatewayRegistry } from "./registry.js";
 
@@ -18,6 +21,7 @@ export const Input = Schema.Struct({
   title: Schema.optional(Schema.String),
   agent: Schema.optional(Agent.ID),
   model: Schema.optional(Model.Ref),
+  location: Schema.optional(Location.Ref),
 });
 export type Input = typeof Input.Type;
 
@@ -32,6 +36,9 @@ export interface Interface {
   readonly create: (
     input: Input,
   ) => Effect.Effect<Session.Info, ProvisionError>;
+  readonly resume: (
+    workspaceID: Workspace.ID,
+  ) => Effect.Effect<void, ProvisionError>;
 }
 
 export class Service extends Context.Service<Service, Interface>()(
@@ -51,6 +58,14 @@ export function layer(options: {
       const credentials = yield* GatewayCredentials.Service;
       const events = yield* GatewayEvents.Service;
       const httpClient = yield* HttpClient.HttpClient;
+      const locks = new Map<string, Semaphore.Semaphore>();
+      const lock = (workspaceID: string) => {
+        const existing = locks.get(workspaceID);
+        if (existing) return existing;
+        const created = Semaphore.makeUnsafe(1);
+        locks.set(workspaceID, created);
+        return created;
+      };
 
       const existing = Effect.fnUntraced(function* (sessionID: Session.ID) {
         const binding = yield* registry.findSession(sessionID);
@@ -70,9 +85,23 @@ export function layer(options: {
             const recorded = yield* existing(input.id);
             if (recorded) return recorded;
           }
+          const imageName = GatewayImage.select(
+            input.location?.directory,
+            options.root,
+          );
+          if (!imageName)
+            return yield* Effect.fail(
+              new Error("Invalid gateway image selector"),
+            );
+          const image = yield* registry.findImage(imageName);
+          if (!image)
+            return yield* new GatewayRegistry.ImageNotFoundError({
+              name: imageName,
+            });
           const installationID = yield* registry.installationID;
           const workspace = yield* registry.createWorkspace({
             directory: options.root,
+            imageName,
           });
           const sandbox = yield* modal
             .create({
@@ -83,6 +112,7 @@ export function layer(options: {
               root: options.root,
               upstreamPassword: options.upstreamPassword,
               credentials: credentials.snapshot,
+              imageID: image.imageID,
             })
             .pipe(Effect.onError(() => registry.removeWorkspace(workspace.id)));
           return yield* Effect.gen(function* () {
@@ -135,7 +165,50 @@ export function layer(options: {
         }).pipe(Effect.mapError((cause) => new ProvisionError({ cause }))),
       );
 
-      return Service.of({ create });
+      const resume = Effect.fn("GatewayProvision.resume")((workspaceID) =>
+        lock(workspaceID).withPermits(1)(
+          Effect.gen(function* () {
+            const current = yield* registry.currentSandbox(workspaceID);
+            if (current) {
+              if (yield* modal.running(current.id)) return;
+              yield* registry.finishSandbox(current.id, "missing", Date.now());
+            }
+            const workspace = yield* registry.getWorkspace(workspaceID);
+            if (!workspace)
+              return yield* new GatewayRegistry.WorkspaceNotFoundError({
+                workspaceID,
+              });
+            const selected = yield* registry.getWorkspaceImage(workspaceID);
+            if (!selected)
+              return yield* new GatewayRegistry.ImageNotFoundError({
+                name: GatewayImage.DefaultName,
+              });
+            const installationID = yield* registry.installationID;
+            const generation =
+              yield* registry.nextSandboxGeneration(workspaceID);
+            const sandbox = yield* modal.create({
+              installationID,
+              workspaceID,
+              generation,
+              volumeSubpath: workspace.volumeSubpath,
+              root: options.root,
+              upstreamPassword: options.upstreamPassword,
+              credentials: credentials.snapshot,
+              imageID: selected.image.imageID,
+            });
+            yield* registry.registerSandbox({
+              id: sandbox.id,
+              workspaceID,
+              generation,
+              status: "running",
+              timeCreated: Date.now(),
+            });
+            yield* events.watch(workspaceID);
+          }).pipe(Effect.mapError((cause) => new ProvisionError({ cause }))),
+        ),
+      );
+
+      return Service.of({ create, resume });
     }),
   );
 }

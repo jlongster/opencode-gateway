@@ -43,7 +43,19 @@ export interface Interface {
     readonly root: string;
     readonly upstreamPassword: string;
     readonly credentials: Snapshot;
+    readonly imageID?: string;
   }) => Effect.Effect<{ readonly id: string }, ModalError>;
+  readonly flushPersist: (sandboxID: string) => Effect.Effect<void, ModalError>;
+  readonly snapshotFilesystem: (
+    sandboxID: string,
+  ) => Effect.Effect<string, ModalError>;
+  readonly writeToolResponse: (
+    sandboxID: string,
+    callID: string,
+    response: unknown,
+  ) => Effect.Effect<void, ModalError>;
+  readonly deleteImage: (imageID: string) => Effect.Effect<void, ModalError>;
+  readonly running: (sandboxID: string) => Effect.Effect<boolean, ModalError>;
   readonly terminate: (sandboxID: string) => Effect.Effect<void, ModalError>;
 }
 
@@ -135,6 +147,76 @@ export function layer(options: Options) {
           }),
       );
 
+      const running = Effect.fn("GatewayModal.running")((sandboxID: string) =>
+        request("sandbox.poll", async () => {
+          const sandbox = await client.sandboxes.fromId(sandboxID);
+          try {
+            return (await sandbox.poll()) === null;
+          } finally {
+            sandbox.detach();
+          }
+        }),
+      );
+
+      const flushPersist = Effect.fn("GatewayModal.flushPersist")(
+        (sandboxID: string) =>
+          request("sandbox.flushPersist", async () => {
+            const sandbox = await client.sandboxes.fromId(sandboxID);
+            try {
+              const process = await sandbox.exec(["sync", "-f", "/persist"]);
+              const code = await process.wait();
+              if (code !== 0)
+                throw new Error(
+                  (await process.stderr.readText()).trim() ||
+                    `sync exited with code ${code}`,
+                );
+            } finally {
+              sandbox.detach();
+            }
+          }),
+      );
+
+      const snapshotFilesystem = Effect.fn("GatewayModal.snapshotFilesystem")(
+        (sandboxID: string) =>
+          request("sandbox.snapshotFilesystem", async () => {
+            const sandbox = await client.sandboxes.fromId(sandboxID);
+            try {
+              const image = await sandbox.snapshotFilesystem({ ttlMs: null });
+              return image.imageId;
+            } finally {
+              sandbox.detach();
+            }
+          }),
+      );
+
+      const writeToolResponse = Effect.fn("GatewayModal.writeToolResponse")(
+        (sandboxID: string, callID: string, response: unknown) =>
+          request("sandbox.writeToolResponse", async () => {
+            const sandbox = await client.sandboxes.fromId(sandboxID);
+            try {
+              const directory = "/tmp/opencode-gateway-tools";
+              const mkdir = await sandbox.exec(["mkdir", "-p", directory]);
+              const code = await mkdir.wait();
+              if (code !== 0)
+                throw new Error(
+                  (await mkdir.stderr.readText()).trim() ||
+                    `mkdir exited with code ${code}`,
+                );
+              await sandbox.filesystem.writeText(
+                JSON.stringify(response),
+                `${directory}/${encodeURIComponent(callID)}.json`,
+              );
+            } finally {
+              sandbox.detach();
+            }
+          }),
+      );
+
+      const deleteImage = Effect.fn("GatewayModal.deleteImage")(
+        (imageID: string) =>
+          request("image.delete", () => client.images.delete(imageID)),
+      );
+
       const create = Effect.fn("GatewayModal.create")(function* (input: {
         readonly installationID: string;
         readonly workspaceID: Workspace.ID;
@@ -143,20 +225,26 @@ export function layer(options: Options) {
         readonly root: string;
         readonly upstreamPassword: string;
         readonly credentials: Snapshot;
+        readonly imageID?: string;
       }) {
         const started = Date.now();
         yield* Effect.logInfo("creating Modal sandbox", {
           workspaceID: input.workspaceID,
           generation: input.generation,
-          image: options.image ?? "oven/bun:1.3.14",
+          image: input.imageID ?? options.image ?? "oven/bun:1.3.14",
           opencodeVersion: options.opencodeVersion ?? "dev",
         });
-        const image = client.images
-          .fromRegistry(options.image ?? "oven/bun:1.3.14")
-          .dockerfileCommands([
-            "USER root",
-            `RUN bun install -g @opencode-ai/cli@${quote(options.opencodeVersion ?? "dev")} --trust`,
-          ]);
+        const image = input.imageID
+          ? yield* request("image.fromId", () =>
+              client.images.fromId(input.imageID!),
+            )
+          : client.images
+              .fromRegistry(options.image ?? "oven/bun:1.3.14")
+              .dockerfileCommands([
+                "USER root",
+                `RUN bun install -g @opencode-ai/cli@${quote(options.opencodeVersion ?? "dev")} --trust`,
+                "RUN mkdir -p /opt/opencode-gateway-plugin && cd /opt/opencode-gateway-plugin && bun init -y && bun add @opencode-ai/plugin@dev",
+              ]);
         const retained = yield* Ref.make(false);
         return yield* Effect.acquireUseRelease(
           Effect.gen(function* () {
@@ -170,6 +258,11 @@ export function layer(options: Options) {
                   XDG_DATA_HOME: "/persist/opencode/data",
                   XDG_STATE_HOME: "/persist/opencode/state",
                   XDG_CACHE_HOME: "/persist/opencode/cache",
+                  OPENCODE_CONFIG_CONTENT: JSON.stringify({
+                    plugins: [
+                      "/persist/opencode/config/plugins/opencode-gateway.js",
+                    ],
+                  }),
                 },
                 volumes: {
                   "/persist": volume.withMountOptions({
@@ -202,6 +295,25 @@ export function layer(options: Options) {
                 sandbox.filesystem.writeText(
                   credentialImporter,
                   "/tmp/opencode-credential-import.ts",
+                ),
+              );
+              yield* request("sandbox.prepareGatewayPlugin", async () => {
+                const process = await sandbox.exec([
+                  "mkdir",
+                  "-p",
+                  "/persist/opencode/config/plugins",
+                ]);
+                const code = await process.wait();
+                if (code !== 0)
+                  throw new Error(
+                    (await process.stderr.readText()).trim() ||
+                      `mkdir exited with code ${code}`,
+                  );
+              });
+              yield* request("sandbox.writeGatewayPlugin", () =>
+                sandbox.filesystem.writeText(
+                  gatewayPlugin,
+                  "/persist/opencode/config/plugins/opencode-gateway.js",
                 ),
               );
               yield* request("sandbox.writeCredentials", () =>
@@ -277,6 +389,11 @@ export function layer(options: Options) {
         listOwned,
         connect,
         create,
+        flushPersist,
+        snapshotFilesystem,
+        writeToolResponse,
+        deleteImage,
+        running,
         terminate,
       });
     }),
@@ -286,8 +403,9 @@ export function layer(options: Options) {
 function bootstrap(input: { readonly root: string }) {
   return [
     "set -euo pipefail",
+    `mkdir -p ${quote(input.root)} /persist/opencode/{config,data,state,cache} /persist/opencode/config/plugins`,
+    "rm -rf /tmp/opencode-gateway-tools",
     "cat > /tmp/opencode-credentials.json",
-    `mkdir -p ${quote(input.root)} /persist/opencode/{config,data,state,cache}`,
     `cd ${quote(input.root)}`,
     "opencode2 serve --hostname 127.0.0.1 --port 4095 &",
     "bootstrap_pid=$!",
@@ -308,6 +426,57 @@ for (let attempt = 0; attempt < 60; attempt++) {
   await Bun.sleep(1000)
 }
 process.exit(1)
+`;
+
+const gatewayPlugin = `
+import { Plugin } from "/opt/opencode-gateway-plugin/node_modules/@opencode-ai/plugin/dist/promise/index.js"
+import { mkdir, readFile, rm } from "node:fs/promises"
+
+const directory = "/tmp/opencode-gateway-tools"
+
+export default Plugin.define({
+  id: "opencode.gateway",
+  setup: async (context) => {
+    await context.tool.transform((tools) => {
+      tools.add({
+        name: "image_snapshot",
+        options: {
+          namespace: "gateway",
+          permission: "gateway.image_snapshot",
+          codemode: false,
+        },
+        description: "Save this workspace's VM filesystem as a named reusable gateway image.",
+        input: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
+              description: "Immutable image name shown by /cd on the home screen.",
+            },
+          },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        execute: async ({ name }, call) => {
+          await mkdir(directory, { recursive: true })
+          const file = directory + "/" + encodeURIComponent(call.id) + ".json"
+          for (let attempt = 0; attempt < 600; attempt++) {
+            const text = await readFile(file, "utf8").catch(() => undefined)
+            if (text !== undefined) {
+              await rm(file, { force: true })
+              const response = JSON.parse(text)
+              if (!response.ok) throw new Error(response.error || "Gateway operation failed")
+              return { content: [{ type: "text", text: JSON.stringify(response.result) }] }
+            }
+            await Bun.sleep(250)
+          }
+          throw new Error("Timed out waiting for the OpenCode gateway")
+        },
+      })
+    })
+  },
+})
 `;
 
 const credentialImporter = `

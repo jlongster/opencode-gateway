@@ -18,6 +18,7 @@ import { GatewayHandler } from "../src/handler";
 import { GatewayProcess } from "../src/process";
 import { GatewayProvision } from "../src/provision";
 import { GatewayRegistry } from "../src/registry";
+import { GatewayTools } from "../src/tools";
 
 const temporaryDirectories: string[] = [];
 const password = "gateway-secret";
@@ -50,15 +51,22 @@ function services(databasePath: string, controlURL = "http://127.0.0.1:1") {
   const backend = GatewayBackend.registryLayer.pipe(Layer.provide(registry));
   const upstream = Layer.mergeAll(registry, backend, FetchHttpClient.layer);
   const aggregate = GatewayAggregate.layer.pipe(Layer.provide(upstream));
-  const events = GatewayEvents.layer().pipe(Layer.provide(upstream));
+  const tools = Layer.succeed(
+    GatewayTools.Service,
+    GatewayTools.Service.of({ observe: () => Effect.void }),
+  );
+  const events = GatewayEvents.layer().pipe(
+    Layer.provide(Layer.merge(upstream, tools)),
+  );
   const provision = Layer.succeed(
     GatewayProvision.Service,
     GatewayProvision.Service.of({
       create: () => Effect.die(new Error("not used")),
+      resume: () => Effect.die(new Error("not used")),
     }),
   );
   const control = GatewayControl.layer({ url: controlURL, headers: {} });
-  return Layer.mergeAll(upstream, aggregate, events, provision, control);
+  return Layer.mergeAll(upstream, aggregate, tools, events, provision, control);
 }
 
 describe("GatewayHandler", () => {
@@ -400,6 +408,27 @@ describe("GatewayHandler", () => {
           canonical: "/persist/project",
         },
       });
+      const images = await handle(
+        authenticated("http://gateway.test/api/fs/list"),
+      );
+      expect(images.status).toBe(200);
+      expect(await images.json()).toEqual({
+        location: {
+          directory: "/persist/project",
+          project: {
+            id: "global",
+            directory: "/persist/project",
+            canonical: "/persist/project",
+          },
+        },
+        data: [{ path: "default", type: "directory" }],
+      });
+      const missingImage = await handle(
+        authenticated(
+          "http://gateway.test/api/location?location%5Bdirectory%5D=%2Fpersist%2Fproject%2Fmissing",
+        ),
+      );
+      expect(missingImage.status).toBe(404);
       expect(requests.count).toBe(0);
       void upstream;
     } finally {

@@ -7,6 +7,7 @@ import {
   Context,
   DateTime,
   Effect,
+  Fiber,
   Layer,
   Ref,
   Schedule,
@@ -18,6 +19,7 @@ import { HttpClient } from "effect/unstable/http";
 import { GatewayBackend } from "./backend.js";
 import { GatewayClient } from "./client.js";
 import { GatewayRegistry } from "./registry.js";
+import { GatewayTools } from "./tools.js";
 
 const encoder = new TextEncoder();
 const capacity = 256;
@@ -57,9 +59,16 @@ export const layer = (options: { readonly root?: string } = {}) =>
       const backend = yield* GatewayBackend.Service;
       const registry = yield* GatewayRegistry.Service;
       const httpClient = yield* HttpClient.HttpClient;
+      const tools = yield* GatewayTools.Service;
       const scope = yield* Scope.Scope;
       const started = yield* Ref.make(false);
-      const watched = new Set<Workspace.ID>();
+      const watched = new Map<
+        Workspace.ID,
+        {
+          readonly sandboxID: string;
+          readonly fiber: Fiber.Fiber<void, unknown>;
+        }
+      >();
       const controlStarted = yield* Ref.make(false);
       const subscribers = new Map<number, Subscriber>();
       const sequence = { value: 0 };
@@ -125,31 +134,42 @@ export const layer = (options: { readonly root?: string } = {}) =>
         yield* fanout(translate(event, workspaceID));
       });
 
-      const run = Effect.fnUntraced(function* (workspaceID: Workspace.ID) {
+      const run = Effect.fnUntraced(function* (
+        workspaceID: Workspace.ID,
+        sandbox: GatewayRegistry.SandboxInfo,
+      ) {
         const connection = yield* backend.connect(workspaceID);
         const client = yield* GatewayClient.make(connection, httpClient);
         return yield* client.event.subscribe().pipe(
           Stream.filter((event) => event.type !== "server.connected"),
-          Stream.runForEach((event) => publish(event, workspaceID)),
+          Stream.runForEach((event) =>
+            tools
+              .observe(event, sandbox)
+              .pipe(Effect.andThen(publish(event, workspaceID))),
+          ),
         );
       });
 
       const watch = Effect.fn("GatewayEvents.watch")(function* (
         workspaceID: Workspace.ID,
       ) {
-        if (watched.has(workspaceID)) return;
-        if (!(yield* registry.currentSandbox(workspaceID))) return;
-        watched.add(workspaceID);
-        yield* run(workspaceID).pipe(
+        const sandbox = yield* registry.currentSandbox(workspaceID);
+        if (!sandbox) return;
+        const existing = watched.get(workspaceID);
+        if (existing?.sandboxID === sandbox.id) return;
+        if (existing) yield* Fiber.interrupt(existing.fiber);
+        const fiber = yield* run(workspaceID, sandbox).pipe(
           Effect.tapError((error) =>
             Effect.logDebug("gateway upstream event stream disconnected", {
               workspaceID,
+              sandboxID: sandbox.id,
               error,
             }),
           ),
           Effect.retry(Schedule.spaced("5 seconds")),
           Effect.forkIn(scope),
         );
+        watched.set(workspaceID, { sandboxID: sandbox.id, fiber });
       });
 
       const watchControl = Effect.fn("GatewayEvents.watchControl")(function* (

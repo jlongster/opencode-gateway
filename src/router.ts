@@ -6,6 +6,7 @@ export type Decision =
   | { readonly type: "empty-projects" }
   | { readonly type: "empty-saved-permissions" }
   | { readonly type: "default-location" }
+  | { readonly type: "images" }
   | { readonly type: "sessions" }
   | { readonly type: "active-sessions" }
   | { readonly type: "events" }
@@ -92,6 +93,8 @@ export function classify(request: Request): Decision {
 
   const workspaceID = workspace(request, url);
   if (workspaceID) return { type: "workspace", workspaceID };
+  if (method === "GET" && url.pathname === "/api/fs/list")
+    return { type: "images" };
   if (method === "GET" && url.pathname === "/api/location")
     return { type: "default-location" };
 

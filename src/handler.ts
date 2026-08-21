@@ -7,6 +7,7 @@ import { GatewayAggregate } from "./aggregate.js";
 import { GatewayBackend } from "./backend.js";
 import { GatewayControl } from "./control.js";
 import { GatewayEvents } from "./events.js";
+import { GatewayImage } from "./image.js";
 import { GatewayModal } from "./modal.js";
 import { GatewayProvision } from "./provision.js";
 import { GatewayRegistry } from "./registry.js";
@@ -49,10 +50,42 @@ export function handle(request: Request, options: Options) {
     if (decision.type === "empty-saved-permissions")
       return Response.json({ data: [] });
     if (decision.type === "default-location") {
-      const directory = options.root ?? "/persist/project";
+      const root = options.root ?? "/persist/project";
+      const url = new URL(request.url);
+      const requested =
+        url.searchParams.get("location[directory]") ??
+        url.searchParams.get("location.directory");
+      const name = GatewayImage.select(requested ?? undefined, root);
+      if (!name)
+        return Response.json(
+          { code: "invalid_image", message: "Invalid gateway image selector" },
+          { status: 400 },
+        );
+      const registry = yield* GatewayRegistry.Service;
+      if (!(yield* registry.findImage(name)))
+        return Response.json(
+          { code: "image_not_found", name },
+          { status: 404 },
+        );
+      const directory = GatewayImage.directory(name, root);
       return Response.json({
         directory,
-        project: { id: "global", directory, canonical: directory },
+        project: { id: "global", directory: root, canonical: root },
+      });
+    }
+    if (decision.type === "images") {
+      const root = options.root ?? "/persist/project";
+      const registry = yield* GatewayRegistry.Service;
+      const images = yield* registry.listImages;
+      return Response.json({
+        location: {
+          directory: root,
+          project: { id: "global", directory: root, canonical: root },
+        },
+        data: images.map((image) => ({
+          path: image.name,
+          type: "directory",
+        })),
       });
     }
     if (decision.type === "sessions") {
@@ -114,7 +147,13 @@ export function handle(request: Request, options: Options) {
     const workspaceID = yield* resolveWorkspace(decision, registry);
     if (workspaceID instanceof Response) return workspaceID;
     const backend = yield* GatewayBackend.Service;
+    const provision = yield* GatewayProvision.Service;
     return yield* backend.connect(workspaceID).pipe(
+      Effect.catchTag("GatewayBackend.UnavailableError", () =>
+        provision
+          .resume(workspaceID)
+          .pipe(Effect.andThen(backend.connect(workspaceID))),
+      ),
       Effect.flatMap((connection) =>
         proxy(request, connection, workspaceID, decision, registry),
       ),
@@ -125,6 +164,18 @@ export function handle(request: Request, options: Options) {
               code: "workspace_unavailable",
               workspaceID,
               message: error.reason,
+            },
+            { status: 503 },
+          ),
+        ),
+      ),
+      Effect.catchTag("GatewayProvision.ProvisionError", (error) =>
+        Effect.succeed(
+          Response.json(
+            {
+              code: "workspace_restore_failed",
+              workspaceID,
+              message: causeMessage(error.cause),
             },
             { status: 503 },
           ),
@@ -144,6 +195,7 @@ function resolveWorkspace(
         | "empty-projects"
         | "empty-saved-permissions"
         | "default-location"
+        | "images"
         | "sessions"
         | "active-sessions"
         | "events"

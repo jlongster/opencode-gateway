@@ -13,6 +13,7 @@ import { GatewayEvents } from "../src/events";
 import { GatewayProcess } from "../src/process";
 import { GatewayProvision } from "../src/provision";
 import { GatewayRegistry } from "../src/registry";
+import { GatewayTools } from "../src/tools";
 
 const upstream = process.env.DRIVE_UPSTREAM_URL;
 const upstreamPassword = process.env.DRIVE_UPSTREAM_PASSWORD;
@@ -41,11 +42,18 @@ const backend = Layer.succeed(
 );
 const dependencies = Layer.mergeAll(registry, backend, FetchHttpClient.layer);
 const aggregate = GatewayAggregate.layer.pipe(Layer.provide(dependencies));
-const events = GatewayEvents.layer().pipe(Layer.provide(dependencies));
+const tools = Layer.succeed(
+  GatewayTools.Service,
+  GatewayTools.Service.of({ observe: () => Effect.void }),
+);
+const events = GatewayEvents.layer().pipe(
+  Layer.provide(Layer.merge(dependencies, tools)),
+);
 const provision = Layer.succeed(
   GatewayProvision.Service,
   GatewayProvision.Service.of({
     create: () => Effect.die(new Error("not used by the Drive harness")),
+    resume: () => Effect.die(new Error("not used by the Drive harness")),
   }),
 );
 const control = GatewayControl.layer({
@@ -55,6 +63,7 @@ const control = GatewayControl.layer({
 const services = Layer.mergeAll(
   dependencies,
   aggregate,
+  tools,
   events,
   provision,
   control,
