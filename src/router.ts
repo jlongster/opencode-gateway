@@ -93,7 +93,7 @@ export function classify(request: Request): Decision {
 
   const workspaceID = workspace(request, url);
   if (workspaceID) return { type: "workspace", workspaceID };
-  if (method === "GET" && url.pathname === "/api/fs/list")
+  if (method === "GET" && url.pathname === "/api/fs/find")
     return { type: "images" };
   if (method === "GET" && url.pathname === "/api/location")
     return { type: "default-location" };

@@ -60,9 +60,12 @@ export function handle(request: Request, options: Options) {
         root,
       );
       const registry = yield* GatewayRegistry.Service;
-      const name = (yield* registry.findImage(requestedName))
-        ? requestedName
-        : GatewayImage.DefaultName;
+      if (!(yield* registry.findImage(requestedName)))
+        return Response.json(
+          { code: "image_not_found", name: requestedName },
+          { status: 404 },
+        );
+      const name = requestedName;
       const directory = GatewayImage.directory(name, root);
       return Response.json({
         directory,
@@ -73,15 +76,18 @@ export function handle(request: Request, options: Options) {
       const root = options.root ?? "/root";
       const registry = yield* GatewayRegistry.Service;
       const images = yield* registry.listImages;
+      const query = new URL(request.url).searchParams.get("query") ?? "";
       return Response.json({
         location: {
           directory: root,
           project: { id: "global", directory: root, canonical: root },
         },
-        data: images.map((image) => ({
-          path: image.name,
-          type: "directory",
-        })),
+        data: images
+          .filter((image) => image.name.includes(query))
+          .map((image) => ({
+            path: image.name,
+            type: "directory",
+          })),
       });
     }
     if (decision.type === "sessions") {
