@@ -39,7 +39,7 @@ test("snapshots a named image once for replayed native tool events", async () =>
       connect: () => Effect.die(new Error("not used")),
       create: () => Effect.die(new Error("not used")),
       terminate: () => Effect.void,
-      flushPersist: () => Effect.void,
+      flushFilesystem: () => Effect.void,
       snapshotFilesystem: () =>
         Effect.sync(() => {
           snapshots.count++;

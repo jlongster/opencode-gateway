@@ -45,7 +45,9 @@ export interface Interface {
     readonly credentials: Snapshot;
     readonly imageID?: string;
   }) => Effect.Effect<{ readonly id: string }, ModalError>;
-  readonly flushPersist: (sandboxID: string) => Effect.Effect<void, ModalError>;
+  readonly flushFilesystem: (
+    sandboxID: string,
+  ) => Effect.Effect<void, ModalError>;
   readonly snapshotFilesystem: (
     sandboxID: string,
   ) => Effect.Effect<string, ModalError>;
@@ -158,12 +160,12 @@ export function layer(options: Options) {
         }),
       );
 
-      const flushPersist = Effect.fn("GatewayModal.flushPersist")(
+      const flushFilesystem = Effect.fn("GatewayModal.flushFilesystem")(
         (sandboxID: string) =>
-          request("sandbox.flushPersist", async () => {
+          request("sandbox.flushFilesystem", async () => {
             const sandbox = await client.sandboxes.fromId(sandboxID);
             try {
-              const process = await sandbox.exec(["sync", "-f", "/persist"]);
+              const process = await sandbox.exec(["sync"]);
               const code = await process.wait();
               if (code !== 0)
                 throw new Error(
@@ -253,15 +255,8 @@ export function layer(options: Options) {
                 command: ["bash", "-lc", bootstrap({ root: input.root })],
                 env: {
                   OPENCODE_PASSWORD: input.upstreamPassword,
-                  OPENCODE_DB: "/persist/opencode/opencode.db",
-                  OPENCODE_CONFIG_DIR: "/persist/opencode/config",
-                  XDG_DATA_HOME: "/persist/opencode/data",
-                  XDG_STATE_HOME: "/persist/opencode/state",
-                  XDG_CACHE_HOME: "/persist/opencode/cache",
                   OPENCODE_CONFIG_CONTENT: JSON.stringify({
-                    plugins: [
-                      "/persist/opencode/config/plugins/opencode-gateway.js",
-                    ],
+                    plugins: ["/tmp/opencode-gateway-plugin.js"],
                   }),
                 },
                 volumes: {
@@ -297,23 +292,10 @@ export function layer(options: Options) {
                   "/tmp/opencode-credential-import.ts",
                 ),
               );
-              yield* request("sandbox.prepareGatewayPlugin", async () => {
-                const process = await sandbox.exec([
-                  "mkdir",
-                  "-p",
-                  "/persist/opencode/config/plugins",
-                ]);
-                const code = await process.wait();
-                if (code !== 0)
-                  throw new Error(
-                    (await process.stderr.readText()).trim() ||
-                      `mkdir exited with code ${code}`,
-                  );
-              });
               yield* request("sandbox.writeGatewayPlugin", () =>
                 sandbox.filesystem.writeText(
                   gatewayPlugin,
-                  "/persist/opencode/config/plugins/opencode-gateway.js",
+                  "/tmp/opencode-gateway-plugin.js",
                 ),
               );
               yield* request("sandbox.writeCredentials", () =>
@@ -389,7 +371,7 @@ export function layer(options: Options) {
         listOwned,
         connect,
         create,
-        flushPersist,
+        flushFilesystem,
         snapshotFilesystem,
         writeToolResponse,
         deleteImage,
@@ -403,7 +385,6 @@ export function layer(options: Options) {
 function bootstrap(input: { readonly root: string }) {
   return [
     "set -euo pipefail",
-    "mkdir -p /persist/opencode/{config,data,state,cache} /persist/opencode/config/plugins",
     "rm -rf /tmp/opencode-gateway-tools",
     "cat > /tmp/opencode-credentials.json",
     `cd ${quote(input.root)}`,
@@ -481,11 +462,14 @@ export default Plugin.define({
 
 const credentialImporter = `
 import { Database } from "bun:sqlite"
+import os from "node:os"
+import path from "node:path"
 const file = process.argv[2]
 if (!file) throw new Error("Credential snapshot path is required")
 const rows = await Bun.file(file).json()
 if (!Array.isArray(rows)) throw new Error("Credential snapshot must be an array")
-const database = new Database(process.env.OPENCODE_DB)
+const data = process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share")
+const database = new Database(process.env.OPENCODE_DB ?? path.join(data, "opencode", "opencode.db"))
 const columns = database.query("PRAGMA table_info(credential)").all().map((column) => column.name)
 const expected = ["id", "integration_id", "label", "value", "connector_id", "method_id", "active", "time_created", "time_updated"]
 if (expected.some((column) => !columns.includes(column))) throw new Error("OpenCode credential schema is incompatible")

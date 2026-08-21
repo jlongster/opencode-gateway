@@ -380,7 +380,7 @@ describe("GatewayRegistry", () => {
           volumeID: "vo_test",
           connect: () => Effect.die(new Error("not used")),
           create: () => Effect.die(new Error("not used")),
-          flushPersist: () => Effect.die(new Error("not used")),
+          flushFilesystem: () => Effect.die(new Error("not used")),
           snapshotFilesystem: () => Effect.die(new Error("not used")),
           writeToolResponse: () => Effect.die(new Error("not used")),
           deleteImage: () => Effect.die(new Error("not used")),

@@ -45,7 +45,7 @@ test("removes the workspace when Modal creation fails", async () => {
             cause: new Error("failed"),
           }),
         ),
-      flushPersist: () => Effect.void,
+      flushFilesystem: () => Effect.void,
       snapshotFilesystem: () => Effect.die(new Error("not used")),
       writeToolResponse: () => Effect.void,
       deleteImage: () => Effect.void,
@@ -125,7 +125,7 @@ test("restores a missing workspace from its named image", async () => {
           created.push(input);
           return { id: "sb_restored" };
         }),
-      flushPersist: () => Effect.void,
+      flushFilesystem: () => Effect.void,
       snapshotFilesystem: () => Effect.die(new Error("not used")),
       writeToolResponse: () => Effect.void,
       deleteImage: () => Effect.void,

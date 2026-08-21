@@ -102,7 +102,7 @@ export const layer = Layer.effect(
               callID: call.toolCallID,
               name,
             });
-            yield* modal.flushPersist(source.id);
+            yield* modal.flushFilesystem(source.id);
             yield* Effect.logInfo("gateway image snapshot volume flushed", {
               workspaceID: call.workspaceID,
               sandboxID: source.id,
