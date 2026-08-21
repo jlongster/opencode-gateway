@@ -54,6 +54,7 @@ const provision = Layer.succeed(
   GatewayProvision.Service.of({
     create: () => Effect.die(new Error("not used by the Drive harness")),
     resume: () => Effect.die(new Error("not used by the Drive harness")),
+    terminate: () => Effect.die(new Error("not used by the Drive harness")),
   }),
 );
 const control = GatewayControl.layer({

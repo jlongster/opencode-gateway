@@ -63,6 +63,7 @@ function services(databasePath: string, controlURL = "http://127.0.0.1:1") {
     GatewayProvision.Service.of({
       create: () => Effect.die(new Error("not used")),
       resume: () => Effect.die(new Error("not used")),
+      terminate: () => Effect.die(new Error("not used")),
     }),
   );
   const control = GatewayControl.layer({ url: controlURL, headers: {} });

@@ -39,6 +39,9 @@ export interface Interface {
   readonly resume: (
     workspaceID: Workspace.ID,
   ) => Effect.Effect<void, ProvisionError>;
+  readonly terminate: (
+    workspaceID: Workspace.ID,
+  ) => Effect.Effect<void, ProvisionError>;
 }
 
 export class Service extends Context.Service<Service, Interface>()(
@@ -210,7 +213,18 @@ export function layer(options: {
         ),
       );
 
-      return Service.of({ create, resume });
+      const terminate = Effect.fn("GatewayProvision.terminate")((workspaceID) =>
+        lock(workspaceID).withPermits(1)(
+          Effect.gen(function* () {
+            const sandbox = yield* registry.currentSandbox(workspaceID);
+            if (!sandbox) return;
+            yield* modal.terminate(sandbox.id);
+            yield* registry.finishSandbox(sandbox.id, "finished", Date.now());
+          }).pipe(Effect.mapError((cause) => new ProvisionError({ cause }))),
+        ),
+      );
+
+      return Service.of({ create, resume, terminate });
     }),
   );
 }

@@ -159,7 +159,7 @@ export function handle(request: Request, options: Options) {
           .pipe(Effect.andThen(backend.connect(workspaceID))),
       ),
       Effect.flatMap((connection) =>
-        proxy(request, connection, workspaceID, decision, registry),
+        proxy(request, connection, workspaceID, decision, registry, provision),
       ),
       Effect.catchTag("GatewayBackend.UnavailableError", (error) =>
         Effect.succeed(
@@ -384,6 +384,7 @@ function proxy(
   workspaceID: Workspace.ID,
   decision: GatewayRouter.Decision,
   registry: GatewayRegistry.Interface,
+  provision: GatewayProvision.Interface,
 ) {
   return Effect.tryPromise({
     try: async () => {
@@ -427,7 +428,7 @@ function proxy(
     catch: (cause) => cause,
   }).pipe(
     Effect.flatMap((response) =>
-      translate(request, response, workspaceID, decision, registry),
+      translate(request, response, workspaceID, decision, registry, provision),
     ),
     Effect.catch(() =>
       Effect.succeed(
@@ -446,8 +447,26 @@ function translate(
   workspaceID: Workspace.ID,
   decision: GatewayRouter.Decision,
   registry: GatewayRegistry.Interface,
+  provision: GatewayProvision.Interface,
 ) {
   if (!response.ok) return Effect.succeed(response);
+  if (
+    request.method === "DELETE" &&
+    decision.type === "session" &&
+    new URL(request.url).pathname === `/api/session/${decision.sessionID}`
+  )
+    return provision.terminate(workspaceID).pipe(
+      Effect.tapError((error) =>
+        Effect.logError("failed to terminate deleted session sandbox", {
+          workspaceID,
+          sessionID: decision.sessionID,
+          error,
+        }),
+      ),
+      Effect.ignore,
+      Effect.andThen(registry.removeSession(decision.sessionID)),
+      Effect.as(response),
+    );
   if (response.status === 204 || !response.body)
     return removeResource(request, response, registry);
   const kind = translation(request, decision);
