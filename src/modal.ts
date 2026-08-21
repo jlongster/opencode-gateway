@@ -170,6 +170,8 @@ export function layer(options: Options) {
               },
               workdir: "/persist",
               timeoutMs: options.timeoutMs ?? 24 * 60 * 60 * 1000,
+              memoryMiB: 1024,
+              memoryLimitMiB: 1024,
               experimentalOptions: { vm_runtime: true },
               readinessProbe: Probe.withTcp(4096, { intervalMs: 250 }),
               tags: {
