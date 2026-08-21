@@ -170,6 +170,7 @@ export function layer(options: Options) {
               },
               workdir: "/persist",
               timeoutMs: options.timeoutMs ?? 24 * 60 * 60 * 1000,
+              experimentalOptions: { vm_runtime: true },
               readinessProbe: Probe.withTcp(4096, { intervalMs: 250 }),
               tags: {
                 [GatewayTag]: input.installationID,
@@ -252,16 +253,15 @@ function bootstrap(input: { readonly root: string }) {
     "set -euo pipefail",
     "cat > /tmp/opencode-credentials.json",
     `mkdir -p ${quote(input.root)} /persist/opencode/{config,data,state,cache}`,
-    'cp "$(command -v opencode2)" /tmp/opencode2 && chmod +x /tmp/opencode2',
     `cd ${quote(input.root)}`,
-    "/tmp/opencode2 serve --hostname 127.0.0.1 --port 4095 &",
+    "opencode2 serve --hostname 127.0.0.1 --port 4095 &",
     "bootstrap_pid=$!",
     `bun -e ${quote(healthWait)}`,
     'kill -TERM "$bootstrap_pid"',
     'wait "$bootstrap_pid" || true',
     "bun /tmp/opencode-credential-import.ts /tmp/opencode-credentials.json",
     "rm -f /tmp/opencode-credential-import.ts /tmp/opencode-credentials.json",
-    "exec /tmp/opencode2 serve --hostname 0.0.0.0 --port 4096",
+    "exec opencode2 serve --hostname 0.0.0.0 --port 4096",
   ].join("\n");
 }
 
