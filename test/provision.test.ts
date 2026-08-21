@@ -50,6 +50,7 @@ test("removes the workspace when Modal creation fails", async () => {
       writeToolResponse: () => Effect.void,
       deleteImage: () => Effect.void,
       running: () => Effect.succeed(false),
+      deleteDatabase: () => Effect.void,
       terminate: () => Effect.void,
     }),
   );
@@ -130,6 +131,7 @@ test("restores a missing workspace from its named image", async () => {
       writeToolResponse: () => Effect.void,
       deleteImage: () => Effect.void,
       running: () => Effect.succeed(false),
+      deleteDatabase: () => Effect.void,
       terminate: () => Effect.void,
     }),
   );

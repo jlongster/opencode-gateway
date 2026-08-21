@@ -51,6 +51,7 @@ test("snapshots a named image once for replayed native tool events", async () =>
         }),
       deleteImage: () => Effect.void,
       running: () => Effect.succeed(true),
+      deleteDatabase: () => Effect.void,
     }),
   );
   const dependencies = Layer.merge(registry, modal);

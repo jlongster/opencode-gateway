@@ -44,7 +44,6 @@ export interface Interface {
     readonly upstreamPassword: string;
     readonly credentials: Snapshot;
     readonly imageID?: string;
-    readonly fresh: boolean;
   }) => Effect.Effect<{ readonly id: string }, ModalError>;
   readonly flushFilesystem: (
     sandboxID: string,
@@ -59,6 +58,9 @@ export interface Interface {
   ) => Effect.Effect<void, ModalError>;
   readonly deleteImage: (imageID: string) => Effect.Effect<void, ModalError>;
   readonly running: (sandboxID: string) => Effect.Effect<boolean, ModalError>;
+  readonly deleteDatabase: (
+    sandboxID: string,
+  ) => Effect.Effect<void, ModalError>;
   readonly terminate: (sandboxID: string) => Effect.Effect<void, ModalError>;
 }
 
@@ -161,6 +163,28 @@ export function layer(options: Options) {
         }),
       );
 
+      const deleteDatabase = Effect.fn("GatewayModal.deleteDatabase")(
+        (sandboxID: string) =>
+          request("sandbox.deleteDatabase", async () => {
+            const sandbox = await client.sandboxes.fromId(sandboxID);
+            try {
+              const process = await sandbox.exec([
+                "bash",
+                "-lc",
+                "rm -f /opencode/opencode.db /opencode/opencode.db-shm /opencode/opencode.db-wal && sync -f /opencode",
+              ]);
+              const code = await process.wait();
+              if (code !== 0)
+                throw new Error(
+                  (await process.stderr.readText()).trim() ||
+                    `database cleanup exited with code ${code}`,
+                );
+            } finally {
+              sandbox.detach();
+            }
+          }),
+      );
+
       const flushFilesystem = Effect.fn("GatewayModal.flushFilesystem")(
         (sandboxID: string) =>
           request("sandbox.flushFilesystem", async () => {
@@ -232,7 +256,6 @@ export function layer(options: Options) {
         readonly upstreamPassword: string;
         readonly credentials: Snapshot;
         readonly imageID?: string;
-        readonly fresh: boolean;
       }) {
         const started = Date.now();
         yield* Effect.logInfo("creating Modal sandbox", {
@@ -257,19 +280,16 @@ export function layer(options: Options) {
           Effect.gen(function* () {
             const sandbox = yield* request("sandbox.create", () =>
               client.sandboxes.create(app, image, {
-                command: [
-                  "bash",
-                  "-lc",
-                  bootstrap({ root: input.root, fresh: input.fresh }),
-                ],
+                command: ["bash", "-lc", bootstrap({ root: input.root })],
                 env: {
                   OPENCODE_PASSWORD: input.upstreamPassword,
+                  OPENCODE_DB: "/opencode/opencode.db",
                   OPENCODE_CONFIG_CONTENT: JSON.stringify({
                     plugins: ["/tmp/opencode-gateway-plugin.js"],
                   }),
                 },
                 volumes: {
-                  "/persist": volume.withMountOptions({
+                  "/opencode": volume.withMountOptions({
                     subPath: input.volumeSubpath,
                   }),
                 },
@@ -385,21 +405,17 @@ export function layer(options: Options) {
         writeToolResponse,
         deleteImage,
         running,
+        deleteDatabase,
         terminate,
       });
     }),
   );
 }
 
-function bootstrap(input: { readonly root: string; readonly fresh: boolean }) {
+function bootstrap(input: { readonly root: string }) {
   return [
     "set -euo pipefail",
     "rm -rf /tmp/opencode-gateway-tools",
-    ...(input.fresh
-      ? [
-          'rm -f "$HOME/.local/share/opencode/opencode.db" "$HOME/.local/share/opencode/opencode.db-shm" "$HOME/.local/share/opencode/opencode.db-wal"',
-        ]
-      : []),
     "cat > /tmp/opencode-credentials.json",
     `cd ${quote(input.root)}`,
     "opencode2 serve --hostname 127.0.0.1 --port 4095 &",

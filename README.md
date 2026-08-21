@@ -45,7 +45,7 @@ OPENCODE_PASSWORD="$OPENCODE_GATEWAY_PASSWORD" \
 
 The home screen reads its agent/model/provider/integration catalog from the local OpenCode control plane. Submitting the first prompt calls `POST /api/session`, which creates a workspace subpath and Modal sandbox, starts OpenCode, registers the initial session, and begins proxying its event stream.
 
-On the home screen, `/cd` autocomplete lists gateway Images as virtual directories. The built-in Image is named `default`; selecting a named Image creates the next workspace from that Modal filesystem snapshot. Inside a workspace, OpenCode starts in `/root` and filesystem requests route to its Modal VM. OpenCode uses its normal root-user configuration, data, state, and cache locations; the gateway does not create `/persist/project` or `/persist/opencode`.
+The root-config `/image` command lists gateway Images in a searchable picker. The built-in Image is named `default`; selecting a named Image creates the next workspace from that Modal filesystem snapshot. Inside a workspace, OpenCode starts in `/root` and filesystem requests route to its Modal VM. Project files, configuration, cache, and other VM state are ephemeral unless captured in a named filesystem snapshot. Only `opencode.db` is persisted, at `/opencode/opencode.db` on the workspace's Volume subpath. Deleting the session deletes that database and terminates its sandbox.
 
 Each sandbox loads a direct, non-CodeMode tool named `gateway_image_snapshot`. Ask the agent to use it with an immutable name to retain the VM filesystem indefinitely as a reusable Image. The gateway receives the native tool event, creates the snapshot, records it in the catalog, and returns the result to the waiting tool. Snapshotting does not terminate the VM.
 

@@ -385,6 +385,7 @@ describe("GatewayRegistry", () => {
           writeToolResponse: () => Effect.die(new Error("not used")),
           deleteImage: () => Effect.die(new Error("not used")),
           running: () => Effect.die(new Error("not used")),
+          deleteDatabase: () => Effect.die(new Error("not used")),
           terminate: () => Effect.die(new Error("not used")),
           listOwned: () =>
             Effect.succeed([
