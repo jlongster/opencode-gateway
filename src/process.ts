@@ -58,7 +58,7 @@ export const start = Effect.fn("GatewayProcess.start")(function* (
   );
   const provisionDependencies = Layer.mergeAll(upstream, tools, events);
   const provision = GatewayProvision.layer({
-    root: options.root ?? "/persist/project",
+    root: options.root ?? "/root",
     upstreamPassword,
   }).pipe(Layer.provide(provisionDependencies));
   const services = Layer.mergeAll(

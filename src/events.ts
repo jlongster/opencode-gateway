@@ -184,7 +184,7 @@ export const layer = (options: { readonly root?: string } = {}) =>
               Effect.gen(function* () {
                 yield* fanout({
                   ...event,
-                  location: { directory: options.root ?? "/persist/project" },
+                  location: { directory: options.root ?? "/root" },
                 });
                 const workspaces = yield* registry.listWorkspaces;
                 yield* Effect.forEach(

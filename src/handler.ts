@@ -50,7 +50,7 @@ export function handle(request: Request, options: Options) {
     if (decision.type === "empty-saved-permissions")
       return Response.json({ data: [] });
     if (decision.type === "default-location") {
-      const root = options.root ?? "/persist/project";
+      const root = options.root ?? "/root";
       const url = new URL(request.url);
       const requested =
         url.searchParams.get("location[directory]") ??
@@ -70,7 +70,7 @@ export function handle(request: Request, options: Options) {
       });
     }
     if (decision.type === "images") {
-      const root = options.root ?? "/persist/project";
+      const root = options.root ?? "/root";
       const registry = yield* GatewayRegistry.Service;
       const images = yield* registry.listImages;
       return Response.json({
@@ -134,7 +134,7 @@ export function handle(request: Request, options: Options) {
       return yield* proxyControl(
         request,
         control.connection,
-        options.root ?? "/persist/project",
+        options.root ?? "/root",
       );
     }
     if (decision.type === "unsupported") return unsupported(decision.reason);

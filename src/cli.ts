@@ -16,7 +16,7 @@ const args = parseArgs({
     app: { type: "string", default: "opencode-gateway-dev" },
     volume: { type: "string", default: "opencode-gateway-workspaces-dev" },
     environment: { type: "string" },
-    root: { type: "string", default: "/persist/project" },
+    root: { type: "string", default: "/root" },
     image: { type: "string", default: "oven/bun:1.3.14" },
     "opencode-version": { type: "string", default: "dev" },
   },

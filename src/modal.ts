@@ -269,7 +269,7 @@ export function layer(options: Options) {
                     subPath: input.volumeSubpath,
                   }),
                 },
-                workdir: "/persist",
+                workdir: input.root,
                 timeoutMs: options.timeoutMs ?? 24 * 60 * 60 * 1000,
                 memoryMiB: 1024,
                 memoryLimitMiB: 1024,
@@ -403,7 +403,7 @@ export function layer(options: Options) {
 function bootstrap(input: { readonly root: string }) {
   return [
     "set -euo pipefail",
-    `mkdir -p ${quote(input.root)} /persist/opencode/{config,data,state,cache} /persist/opencode/config/plugins`,
+    "mkdir -p /persist/opencode/{config,data,state,cache} /persist/opencode/config/plugins",
     "rm -rf /tmp/opencode-gateway-tools",
     "cat > /tmp/opencode-credentials.json",
     `cd ${quote(input.root)}`,
