@@ -67,6 +67,7 @@ export const ImageNamePattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 export interface GatewayImage {
   readonly name: string;
   readonly kind: "default" | "snapshot";
+  readonly description: string;
   readonly imageID?: string;
   readonly sourceWorkspaceID?: Workspace.ID;
   readonly sourceSandboxID?: string;
@@ -103,6 +104,7 @@ export interface GatewayToolCall {
 
 export interface SnapshotImageInput {
   readonly name: string;
+  readonly description: string;
   readonly imageID: string;
   readonly sourceWorkspaceID: Workspace.ID;
   readonly sourceSandboxID: string;
@@ -311,6 +313,7 @@ type SessionRow = {
 type ImageRow = {
   name: string;
   kind: "default" | "snapshot";
+  description: string | null;
   image_id: string | null;
   source_workspace_id: string | null;
   source_sandbox_id: string | null;
@@ -375,6 +378,11 @@ function image(row: ImageRow): GatewayImage {
   return {
     name: row.name,
     kind: row.kind,
+    description:
+      row.description ??
+      (row.kind === "default"
+        ? "Base OpenCode workspace image."
+        : `Reusable workspace snapshot named ${row.name}.`),
     imageID: row.image_id ?? undefined,
     sourceWorkspaceID: row.source_workspace_id
       ? Workspace.ID.make(row.source_workspace_id)
@@ -443,10 +451,10 @@ export const layer = Layer.effect(
         return yield* new ImageNameConflictError({ name: input.name });
       yield* sql`
         INSERT INTO gateway_image (
-          name, kind, image_id, source_workspace_id, source_sandbox_id,
+          name, kind, description, image_id, source_workspace_id, source_sandbox_id,
           source_generation, time_created
         ) VALUES (
-          ${input.name}, 'snapshot', ${input.imageID}, ${input.sourceWorkspaceID},
+          ${input.name}, 'snapshot', ${input.description}, ${input.imageID}, ${input.sourceWorkspaceID},
           ${input.sourceSandboxID}, ${input.sourceGeneration}, ${input.timeCreated}
         )
       `.pipe(Effect.orDie);

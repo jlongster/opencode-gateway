@@ -185,6 +185,7 @@ test("restores a missing workspace from its named image", async () => {
         });
         yield* registry.createSnapshotImage({
           name: "node-tools",
+          description: "Node.js development tools.",
           imageID: "im_node_tools",
           sourceWorkspaceID: workspace.id,
           sourceSandboxID: "sb_original",

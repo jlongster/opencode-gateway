@@ -3,7 +3,7 @@ import { Plugin } from "@opencode-ai/plugin/tui";
 function Commands(props: { context: Plugin.Context }) {
   const server = props.context.client.server.get() as Promise<{
     urls: string[];
-    gateway?: { images?: Array<{ name: string }> };
+    gateway?: { images?: Array<{ name: string; description: string }> };
   }>;
   const images = async () => {
     const connection = await server;
@@ -49,6 +49,7 @@ function Commands(props: { context: Plugin.Context }) {
             placeholder: "Search images",
             options: available.map((image) => ({
               title: image.name,
+              description: image.description,
               value: image.name,
             })),
           });

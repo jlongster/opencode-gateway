@@ -211,6 +211,7 @@ describe("GatewayRegistry", () => {
         });
         const image = yield* registry.createSnapshotImage({
           name: "node-tools",
+          description: "Node.js development tools.",
           imageID: "im_first",
           sourceWorkspaceID: workspace.id,
           sourceSandboxID: "sb_source",
@@ -220,6 +221,7 @@ describe("GatewayRegistry", () => {
         const duplicate = yield* registry
           .createSnapshotImage({
             name: "node-tools",
+            description: "Duplicate Node.js tools.",
             imageID: "im_second",
             sourceWorkspaceID: workspace.id,
             sourceSandboxID: "sb_source",
@@ -230,6 +232,7 @@ describe("GatewayRegistry", () => {
         const invalid = yield* registry
           .createSnapshotImage({
             name: "Invalid",
+            description: "Invalid image name.",
             imageID: "im_invalid",
             sourceWorkspaceID: workspace.id,
             sourceSandboxID: "sb_source",
@@ -249,6 +252,7 @@ describe("GatewayRegistry", () => {
 
     expect(result.image).toMatchObject({
       name: "node-tools",
+      description: "Node.js development tools.",
       kind: "snapshot",
       imageID: "im_first",
       sourceGeneration: 3,
@@ -307,6 +311,7 @@ describe("GatewayRegistry", () => {
           time: 6,
           image: {
             name: "rust-tools",
+            description: "Rust development tools.",
             imageID: "im_rust",
             sourceWorkspaceID: workspace.id,
             sourceSandboxID: "sb_tools",

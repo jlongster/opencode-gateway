@@ -446,6 +446,22 @@ import { mkdir, readFile, rm } from "node:fs/promises"
 
 const directory = "/tmp/opencode-gateway-tools"
 
+const execute = async (input, call) => {
+  await mkdir(directory, { recursive: true })
+  const file = directory + "/" + encodeURIComponent(call.id) + ".json"
+  for (let attempt = 0; attempt < 3_000; attempt++) {
+    const text = await readFile(file, "utf8").catch(() => undefined)
+    if (text !== undefined) {
+      await rm(file, { force: true })
+      const response = JSON.parse(text)
+      if (!response.ok) throw new Error(response.error || "Gateway operation failed")
+      return { content: [{ type: "text", text: JSON.stringify(response.result) }] }
+    }
+    await Bun.sleep(250)
+  }
+  throw new Error("Timed out waiting for the OpenCode gateway")
+}
+
 export default Plugin.define({
   id: "opencode.gateway",
   setup: async (context) => {
@@ -466,25 +482,58 @@ export default Plugin.define({
               pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
               description: "Immutable image name shown by /cd on the home screen.",
             },
+            description: {
+              type: "string",
+              minLength: 1,
+              description: "Describe what the image contains and when another agent should use it.",
+            },
           },
-          required: ["name"],
+          required: ["name", "description"],
           additionalProperties: false,
         },
-        execute: async ({ name }, call) => {
-          await mkdir(directory, { recursive: true })
-          const file = directory + "/" + encodeURIComponent(call.id) + ".json"
-          for (let attempt = 0; attempt < 3_000; attempt++) {
-            const text = await readFile(file, "utf8").catch(() => undefined)
-            if (text !== undefined) {
-              await rm(file, { force: true })
-              const response = JSON.parse(text)
-              if (!response.ok) throw new Error(response.error || "Gateway operation failed")
-              return { content: [{ type: "text", text: JSON.stringify(response.result) }] }
-            }
-            await Bun.sleep(250)
-          }
-          throw new Error("Timed out waiting for the OpenCode gateway")
+        execute,
+      })
+      tools.add({
+        name: "image_list",
+        options: {
+          namespace: "gateway",
+          permission: "gateway.image_list",
+          codemode: false,
         },
+        description: "List reusable gateway images and descriptions before creating a workspace.",
+        input: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+        execute,
+      })
+      tools.add({
+        name: "session_create",
+        options: {
+          namespace: "gateway",
+          permission: "gateway.session_create",
+          codemode: false,
+        },
+        description: "Create a session in a new workspace from a selected gateway image. Call gateway_image_list first.",
+        input: {
+          type: "object",
+          properties: {
+            image: {
+              type: "string",
+              pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
+              description: "Image name returned by gateway_image_list.",
+            },
+            title: {
+              type: "string",
+              minLength: 1,
+              description: "Optional title for the new session.",
+            },
+          },
+          required: ["image"],
+          additionalProperties: false,
+        },
+        execute,
       })
     })
   },

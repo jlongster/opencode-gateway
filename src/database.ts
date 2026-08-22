@@ -55,6 +55,7 @@ const fromClient = Layer.effect(
       CREATE TABLE IF NOT EXISTS gateway_image (
         name TEXT PRIMARY KEY,
         kind TEXT NOT NULL CHECK (kind IN ('default', 'snapshot')),
+        description TEXT,
         image_id TEXT,
         source_workspace_id TEXT REFERENCES workspace(id) ON DELETE SET NULL,
         source_sandbox_id TEXT,
@@ -66,9 +67,22 @@ const fromClient = Layer.effect(
         )
       )
     `;
+    const imageColumns = yield* sql<{
+      name: string;
+    }>`PRAGMA table_info(gateway_image)`;
+    if (!imageColumns.some((column) => column.name === "description"))
+      yield* sql`ALTER TABLE gateway_image ADD COLUMN description TEXT`;
     yield* sql`
-      INSERT OR IGNORE INTO gateway_image (name, kind, time_created)
-      VALUES ('default', 'default', ${Date.now()})
+      UPDATE gateway_image
+      SET description = CASE
+        WHEN kind = 'default' THEN 'Base OpenCode workspace image.'
+        ELSE 'Reusable workspace snapshot named ' || name || '.'
+      END
+      WHERE description IS NULL
+    `;
+    yield* sql`
+      INSERT OR IGNORE INTO gateway_image (name, kind, description, time_created)
+      VALUES ('default', 'default', 'Base OpenCode workspace image.', ${Date.now()})
     `;
     yield* sql`
       CREATE TABLE IF NOT EXISTS workspace_image (

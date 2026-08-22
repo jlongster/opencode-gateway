@@ -416,7 +416,14 @@ describe("GatewayHandler", () => {
       );
       expect(await server.json()).toEqual({
         urls: ["http://gateway.test"],
-        gateway: { images: [{ name: "default" }] },
+        gateway: {
+          images: [
+            {
+              name: "default",
+              description: "Base OpenCode workspace image.",
+            },
+          ],
+        },
       });
 
       const location = await handle(
@@ -463,7 +470,12 @@ describe("GatewayHandler", () => {
       );
       expect(images.status).toBe(200);
       expect(await images.json()).toEqual({
-        data: [{ name: "default" }],
+        data: [
+          {
+            name: "default",
+            description: "Base OpenCode workspace image.",
+          },
+        ],
       });
       const missingImage = await handle(
         authenticated("http://gateway.test/api/gateway/image/missing"),

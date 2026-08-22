@@ -52,7 +52,12 @@ export function handle(request: Request, options: Options) {
       const images = yield* registry.listImages;
       return Response.json({
         urls: [new URL(request.url).origin],
-        gateway: { images: images.map((image) => ({ name: image.name })) },
+        gateway: {
+          images: images.map((image) => ({
+            name: image.name,
+            description: image.description,
+          })),
+        },
       });
     }
     if (decision.type === "empty-projects") return Response.json([]);
@@ -100,7 +105,10 @@ export function handle(request: Request, options: Options) {
       const registry = yield* GatewayRegistry.Service;
       const images = yield* registry.listImages;
       return Response.json({
-        data: images.map((image) => ({ name: image.name })),
+        data: images.map((image) => ({
+          name: image.name,
+          description: image.description,
+        })),
       });
     }
     if (decision.type === "image") {
