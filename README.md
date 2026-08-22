@@ -18,12 +18,13 @@ Start and authenticate the normal local OpenCode service. The gateway uses it fo
 opencode2 service start
 ```
 
-## Install the Image plugin
+## Install the TUI plugins
 
-Install the gateway TUI plugin on each machine that connects to the gateway:
+Install the gateway TUI plugins on each machine that connects to the gateway:
 
 ```sh
 cp plugins/gateway-image.ts ~/.config/opencode/gateway-image.ts
+cp plugins/gateway-sandbox-status.tsx ~/.config/opencode/gateway-sandbox-status.tsx
 ```
 
 Add it to the `plugins` array in `~/.config/opencode/cli.json`, setting `baseURL` to that machine's gateway URL:
@@ -36,12 +37,13 @@ Add it to the `plugins` array in `~/.config/opencode/cli.json`, setting `baseURL
       "options": {
         "baseURL": "http://127.0.0.1:4097"
       }
-    }
+    },
+    "/home/you/.config/opencode/gateway-sandbox-status.tsx"
   ]
 }
 ```
 
-Use the absolute path to your home directory; OpenCode does not expand `~` in plugin paths. Restart the TUI after installing it. The plugin selects the default gateway Image on the home screen and adds the `/image` command for selecting named Images.
+Use the absolute path to your home directory; OpenCode does not expand `~` in plugin paths. Restart the TUI after installing them. The Image plugin selects the default gateway Image on the home screen and adds the `/image` command for selecting named Images. The sandbox status plugin displays a dialog while the first session request provisions its sandbox.
 
 ## Start
 
