@@ -403,6 +403,14 @@ describe("GatewayHandler", () => {
       expect(saved.status).toBe(200);
       expect(await saved.json()).toEqual({ data: [] });
 
+      const server = await handle(
+        authenticated("http://gateway.test/api/server"),
+      );
+      expect(await server.json()).toEqual({
+        urls: ["http://gateway.test"],
+        gateway: { images: [{ name: "default" }] },
+      });
+
       const location = await handle(
         authenticated("http://gateway.test/api/location"),
       );

@@ -46,8 +46,14 @@ export function handle(request: Request, options: Options) {
         version: options.version,
         pid: process.pid,
       });
-    if (decision.type === "server")
-      return Response.json({ urls: [new URL(request.url).origin] });
+    if (decision.type === "server") {
+      const registry = yield* GatewayRegistry.Service;
+      const images = yield* registry.listImages;
+      return Response.json({
+        urls: [new URL(request.url).origin],
+        gateway: { images: images.map((image) => ({ name: image.name })) },
+      });
+    }
     if (decision.type === "empty-projects") return Response.json([]);
     if (decision.type === "empty-saved-permissions")
       return Response.json({ data: [] });

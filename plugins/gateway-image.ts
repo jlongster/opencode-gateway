@@ -2,23 +2,16 @@ import { Plugin } from "@opencode-ai/plugin/tui";
 import { onCleanup, onMount } from "solid-js";
 
 function Commands(props: { context: Plugin.Context }) {
-  const server = props.context.client.server.get();
-  const password = process.env.OPENCODE_PASSWORD;
-  const request = async <Value>(pathname: string) => {
-    const connection = await server;
-    const baseURL = connection.urls[0];
-    if (!baseURL) throw new Error("Connected server did not report a URL");
-    const response = await fetch(new URL(pathname, baseURL), {
-      headers: password
-        ? { authorization: `Basic ${btoa(`opencode:${password}`)}` }
-        : undefined,
-    });
-    if (!response.ok)
-      throw new Error(
-        `Gateway request failed: ${response.status} ${await response.text()}`,
-      );
-    return (await response.json()) as Value;
+  const images = async () => {
+    const server = (await props.context.client.server.get()) as {
+      gateway?: { images?: Array<{ name: string }> };
+    };
+    return server.gateway?.images ?? [];
   };
+  const location = (name: string) =>
+    props.context.client.location.get({
+      location: { directory: name === "default" ? "/root" : `/root/${name}` },
+    } as never);
 
   let selecting = false;
   const ensureHomeImage = async () => {
@@ -38,11 +31,11 @@ function Commands(props: { context: Plugin.Context }) {
       return;
     selecting = true;
     try {
-      const location = await request<{
-        directory: string;
-        project: { id: string; directory: string; canonical: string };
-      }>("/api/gateway/image/default");
-      props.context.ui.router.navigate({ type: "home", location } as never);
+      const selected = await location("default");
+      props.context.ui.router.navigate({
+        type: "home",
+        location: selected,
+      } as never);
     } finally {
       selecting = false;
     }
@@ -66,23 +59,21 @@ function Commands(props: { context: Plugin.Context }) {
         slash: { name: "image" },
         enabled: () => props.context.ui.router.current().type === "home",
         run: async () => {
-          const images = await request<{ data: Array<{ name: string }> }>(
-            "/api/gateway/image",
-          );
+          const available = await images();
           const name = await props.context.ui.dialog.select({
             title: "Select gateway image",
             placeholder: "Search images",
-            options: images.data.map((image) => ({
+            options: available.map((image) => ({
               title: image.name,
               value: image.name,
             })),
           });
           if (!name) return;
-          const location = await request<{
-            directory: string;
-            project: { id: string; directory: string; canonical: string };
-          }>(`/api/gateway/image/${encodeURIComponent(name)}`);
-          props.context.ui.router.navigate({ type: "home", location } as never);
+          const selected = await location(name);
+          props.context.ui.router.navigate({
+            type: "home",
+            location: selected,
+          } as never);
           props.context.ui.toast.show({
             message: `Selected gateway image: ${name}`,
             variant: "success",
