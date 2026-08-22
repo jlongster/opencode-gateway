@@ -8,6 +8,7 @@ export type Decision =
   | { readonly type: "default-location" }
   | { readonly type: "images" }
   | { readonly type: "image"; readonly name: string }
+  | { readonly type: "image-session"; readonly name: string }
   | { readonly type: "sessions" }
   | { readonly type: "active-sessions" }
   | { readonly type: "events" }
@@ -96,6 +97,15 @@ export function classify(request: Request): Decision {
   if (workspaceID) return { type: "workspace", workspaceID };
   if (method === "GET" && url.pathname === "/api/gateway/image")
     return { type: "images" };
+  const imageSession = url.pathname.match(
+    /^\/api\/gateway\/image\/([^/]+)\/session$/,
+  );
+  if (method === "POST" && imageSession) {
+    const name = decodePath(imageSession[1]);
+    return name
+      ? { type: "image-session", name }
+      : { type: "unsupported", reason: "invalid gateway image name" };
+  }
   const image = url.pathname.match(/^\/api\/gateway\/image\/([^/]+)$/);
   if (method === "GET" && image) {
     const name = decodePath(image[1]);

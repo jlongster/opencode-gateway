@@ -2,6 +2,7 @@ export * as GatewayHandler from "./handler.js";
 
 import { Workspace } from "@opencode-ai/schema/workspace";
 import { Session } from "@opencode-ai/schema/session";
+import { AbsolutePath } from "@opencode-ai/schema/schema";
 import { Effect, Option, Schema } from "effect";
 import { GatewayAggregate } from "./aggregate.js";
 import { GatewayBackend } from "./backend.js";
@@ -96,6 +97,24 @@ export function handle(request: Request, options: Options) {
         project: { id: "global", directory: root, canonical: root },
       });
     }
+    if (decision.type === "image-session") {
+      const registry = yield* GatewayRegistry.Service;
+      if (!(yield* registry.findImage(decision.name)))
+        return Response.json(
+          { code: "image_not_found", name: decision.name },
+          { status: 404 },
+        );
+      const provision = yield* GatewayProvision.Service;
+      return yield* provisionResponse(
+        provision.create({
+          location: {
+            directory: AbsolutePath.make(
+              GatewayImage.directory(decision.name, options.root ?? "/root"),
+            ),
+          },
+        }),
+      );
+    }
     if (decision.type === "sessions") {
       const input = sessionListInput(new URL(request.url));
       if (input instanceof Response) return input;
@@ -164,25 +183,7 @@ export function handle(request: Request, options: Options) {
       if (Option.isNone(input))
         return Response.json({ code: "invalid_request" }, { status: 400 });
       const provision = yield* GatewayProvision.Service;
-      return yield* provision.create(input.value).pipe(
-        Effect.map((session) =>
-          Response.json({ data: encodeSession(session) }),
-        ),
-        Effect.catchTag("GatewayProvision.ProvisionError", (error) =>
-          Effect.succeed(
-            Response.json(
-              {
-                code: "provision_failed",
-                message:
-                  error.cause instanceof GatewayModal.ModalError
-                    ? `${error.cause.operation}: ${causeMessage(error.cause.cause)}`
-                    : causeMessage(error.cause),
-              },
-              { status: 503 },
-            ),
-          ),
-        ),
-      );
+      return yield* provisionResponse(provision.create(input.value));
     }
     if (decision.type === "control") {
       const control = yield* GatewayControl.Service;
@@ -248,6 +249,7 @@ function resolveWorkspace(
         | "default-location"
         | "images"
         | "image"
+        | "image-session"
         | "sessions"
         | "active-sessions"
         | "events"
@@ -737,6 +739,28 @@ function unsupported(reason: string) {
   return Response.json(
     { code: "unsupported", message: reason },
     { status: 501 },
+  );
+}
+
+function provisionResponse(
+  effect: Effect.Effect<Session.Info, GatewayProvision.ProvisionError>,
+) {
+  return effect.pipe(
+    Effect.map((session) => Response.json({ data: encodeSession(session) })),
+    Effect.catchTag("GatewayProvision.ProvisionError", (error) =>
+      Effect.succeed(
+        Response.json(
+          {
+            code: "provision_failed",
+            message:
+              error.cause instanceof GatewayModal.ModalError
+                ? `${error.cause.operation}: ${causeMessage(error.cause.cause)}`
+                : causeMessage(error.cause),
+          },
+          { status: 503 },
+        ),
+      ),
+    ),
   );
 }
 

@@ -4,7 +4,7 @@ import { Event } from "@opencode-ai/schema/event";
 import { Project } from "@opencode-ai/schema/project";
 import { AbsolutePath } from "@opencode-ai/schema/schema";
 import { Session } from "@opencode-ai/schema/session";
-import { DateTime, Effect, Layer, ManagedRuntime } from "effect";
+import { DateTime, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { mkdtemp, rm } from "fs/promises";
 import os from "os";
@@ -45,7 +45,15 @@ function authenticated(url: string, init: RequestInit = {}) {
   return new Request(url, { ...init, headers });
 }
 
-function services(databasePath: string, controlURL = "http://127.0.0.1:1") {
+function services(
+  databasePath: string,
+  controlURL = "http://127.0.0.1:1",
+  provisionService: GatewayProvision.Interface = GatewayProvision.Service.of({
+    create: () => Effect.die(new Error("not used")),
+    resume: () => Effect.die(new Error("not used")),
+    terminate: () => Effect.die(new Error("not used")),
+  }),
+) {
   const database = GatewayDatabase.layer({ path: databasePath });
   const registry = GatewayRegistry.layer.pipe(Layer.provide(database));
   const backend = GatewayBackend.registryLayer.pipe(Layer.provide(registry));
@@ -58,14 +66,7 @@ function services(databasePath: string, controlURL = "http://127.0.0.1:1") {
   const events = GatewayEvents.layer().pipe(
     Layer.provide(Layer.merge(upstream, tools)),
   );
-  const provision = Layer.succeed(
-    GatewayProvision.Service,
-    GatewayProvision.Service.of({
-      create: () => Effect.die(new Error("not used")),
-      resume: () => Effect.die(new Error("not used")),
-      terminate: () => Effect.die(new Error("not used")),
-    }),
-  );
+  const provision = Layer.succeed(GatewayProvision.Service, provisionService);
   const control = GatewayControl.layer({ url: controlURL, headers: {} });
   return Layer.mergeAll(upstream, aggregate, tools, events, provision, control);
 }
@@ -463,6 +464,56 @@ describe("GatewayHandler", () => {
       expect(missingImage.status).toBe(404);
       expect(requests.count).toBe(0);
       void upstream;
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
+  test("provisions a session directly from a selected image", async () => {
+    let input: GatewayProvision.Input | undefined;
+    const session = Schema.decodeUnknownSync(Session.Info)(
+      sessionInfo("ses_image"),
+    );
+    const runtime = ManagedRuntime.make(
+      services(
+        await databasePath(),
+        "http://127.0.0.1:1",
+        GatewayProvision.Service.of({
+          create: (value) => {
+            input = value;
+            return Effect.succeed(session);
+          },
+          resume: () => Effect.die(new Error("not used")),
+          terminate: () => Effect.die(new Error("not used")),
+        }),
+      ),
+    );
+
+    try {
+      const handle = (request: Request) =>
+        runtime.runPromise(
+          GatewayHandler.handle(request, { password, version: "test" }),
+        );
+      const response = await handle(
+        authenticated("http://gateway.test/api/gateway/image/default/session", {
+          method: "POST",
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ data: sessionInfo("ses_image") });
+      expect(input?.location?.directory).toBe(AbsolutePath.make("/root"));
+
+      const missing = await handle(
+        authenticated("http://gateway.test/api/gateway/image/missing/session", {
+          method: "POST",
+        }),
+      );
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({
+        code: "image_not_found",
+        name: "missing",
+      });
+      expect(input?.location?.directory).toBe(AbsolutePath.make("/root"));
     } finally {
       await runtime.dispose();
     }

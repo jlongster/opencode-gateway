@@ -1,52 +1,39 @@
 import { Plugin } from "@opencode-ai/plugin/tui";
-import { onCleanup, onMount } from "solid-js";
 
 function Commands(props: { context: Plugin.Context }) {
+  const server = props.context.client.server.get() as Promise<{
+    urls: string[];
+    gateway?: { images?: Array<{ name: string }> };
+  }>;
   const images = async () => {
-    const server = (await props.context.client.server.get()) as {
-      gateway?: { images?: Array<{ name: string }> };
-    };
-    return server.gateway?.images ?? [];
+    const connection = await server;
+    return connection.gateway?.images ?? [];
   };
-  const location = (name: string) =>
-    props.context.client.location.get({
-      location: { directory: name === "default" ? "/root" : `/root/${name}` },
-    } as never);
-
-  let selecting = false;
-  const ensureHomeImage = async () => {
-    const route = props.context.ui.router.current() as {
-      type: string;
-      location?: { directory: string; workspaceID?: string };
+  const create = async (name: string) => {
+    const connection = await server;
+    const baseURL = connection.urls[0];
+    if (!baseURL) throw new Error("Connected server did not report a URL");
+    const password = process.env.OPENCODE_PASSWORD;
+    const response = await fetch(
+      new URL(
+        `/api/gateway/image/${encodeURIComponent(name)}/session`,
+        baseURL,
+      ),
+      {
+        method: "POST",
+        headers: password
+          ? { authorization: `Basic ${btoa(`opencode:${password}`)}` }
+          : undefined,
+      },
+    );
+    if (!response.ok)
+      throw new Error(
+        `Gateway request failed: ${response.status} ${await response.text()}`,
+      );
+    return (await response.json()) as {
+      data: { id: string };
     };
-    const selected =
-      route.location?.directory === "/root" ||
-      /^\/root\/[^/]+$/.test(route.location?.directory ?? "");
-    if (
-      route.type !== "home" ||
-      route.location?.workspaceID ||
-      selected ||
-      selecting
-    )
-      return;
-    selecting = true;
-    try {
-      const selected = await location("default");
-      props.context.ui.router.navigate({
-        type: "home",
-        location: selected,
-      } as never);
-    } finally {
-      selecting = false;
-    }
   };
-  let timer: ReturnType<typeof setInterval>;
-  onMount(() => {
-    const run = () => void ensureHomeImage().catch(() => undefined);
-    run();
-    timer = setInterval(run, 100);
-  });
-  onCleanup(() => clearInterval(timer));
 
   props.context.keymap.layer(() => ({
     mode: "global",
@@ -69,13 +56,13 @@ function Commands(props: { context: Plugin.Context }) {
             })),
           });
           if (!name) return;
-          const selected = await location(name);
+          const session = await create(name);
           props.context.ui.router.navigate({
-            type: "home",
-            location: selected,
-          } as never);
+            type: "session",
+            sessionID: session.data.id,
+          });
           props.context.ui.toast.show({
-            message: `Selected gateway image: ${name}`,
+            message: `Created session from gateway image: ${name}`,
             variant: "success",
           });
         },
