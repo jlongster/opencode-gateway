@@ -8,6 +8,7 @@ import { GatewayBackend } from "./backend.js";
 import { GatewayControl } from "./control.js";
 import { GatewayEvents } from "./events.js";
 import { GatewayImage } from "./image.js";
+import { GatewayIcon } from "./icon.js";
 import { GatewayModal } from "./modal.js";
 import { GatewayProvision } from "./provision.js";
 import { GatewayRegistry } from "./registry.js";
@@ -129,7 +130,7 @@ export function handle(request: Request, options: Options) {
               : session.parentID === input.parentID)),
       );
       const sessions = yield* Effect.forEach(bindings, (binding) =>
-        binding.info
+        (binding.info
           ? Effect.succeed(binding.info)
           : registry.getWorkspace(binding.workspaceID).pipe(
               Effect.map((workspace) =>
@@ -151,7 +152,13 @@ export function handle(request: Request, options: Options) {
                   },
                 }),
               ),
-            ),
+            )
+        ).pipe(
+          Effect.map((session) => ({
+            ...session,
+            title: `${GatewayIcon.workspace(binding.workspaceID)} ${session.title ?? "New session"}`,
+          })),
+        ),
       );
       const search = input.search?.toLowerCase();
       const filtered = search

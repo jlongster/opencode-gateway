@@ -329,6 +329,12 @@ describe("GatewayHandler", () => {
           (session) => record(record(session).location).workspaceID,
         ),
       ).toEqual([workspaces.first.id, workspaces.second.id]);
+      const titles = sessionBody.data.map((session) =>
+        String(record(session).title),
+      );
+      expect(titles[0]?.endsWith(" New session")).toBe(true);
+      expect(titles[1]?.endsWith(" New session")).toBe(true);
+      expect(titles[0]?.split(" ")[0]).not.toBe(titles[1]?.split(" ")[0]);
       const active = await handle(
         authenticated("http://gateway.test/api/session/active"),
       );
