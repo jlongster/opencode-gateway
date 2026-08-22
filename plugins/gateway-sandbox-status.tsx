@@ -36,7 +36,7 @@ export default Plugin.define({
   id: "gateway.sandbox-status",
   setup(context) {
     context.ui.slot({
-      append: "home.footer",
+      append: "app",
       render: () => <SandboxStatus context={context} />,
     });
   },
