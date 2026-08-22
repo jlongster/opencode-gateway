@@ -1,14 +1,20 @@
 export * as GatewayRouter from "./router.js";
 
+import { GatewayImage } from "./image.js";
+
 export type Decision =
   | { readonly type: "health" }
   | { readonly type: "server" }
   | { readonly type: "empty-projects" }
   | { readonly type: "empty-saved-permissions" }
   | { readonly type: "default-location" }
+  | {
+      readonly type: "image-location";
+      readonly name: string;
+      readonly kind: "info" | "list" | "vcs";
+    }
   | { readonly type: "images" }
   | { readonly type: "image"; readonly name: string }
-  | { readonly type: "image-session"; readonly name: string }
   | { readonly type: "sessions" }
   | { readonly type: "active-sessions" }
   | { readonly type: "events" }
@@ -26,6 +32,8 @@ export type Decision =
 export function classify(request: Request): Decision {
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
+  const workspaceID = workspace(request, url);
+  const imageName = GatewayImage.fromWorkspace(workspaceID);
 
   if (method === "GET" && url.pathname === "/api/health")
     return { type: "health" };
@@ -81,7 +89,8 @@ export function classify(request: Request): Decision {
     };
 
   if (/^\/api\/session\/global\/form(?:\/|$)/.test(url.pathname)) {
-    const workspaceID = workspace(request, url);
+    if (method === "GET" && imageName)
+      return { type: "image-location", name: imageName, kind: "list" };
     return workspaceID
       ? { type: "workspace", workspaceID }
       : {
@@ -93,19 +102,18 @@ export function classify(request: Request): Decision {
   const session = url.pathname.match(/^\/api\/session\/([^/]+)(?:\/|$)/);
   if (session) return { type: "session", sessionID: session[1] };
 
-  const workspaceID = workspace(request, url);
+  if (method === "GET" && imageName) {
+    if (url.pathname === "/api/location")
+      return { type: "image-location", name: imageName, kind: "info" };
+    if (url.pathname === "/api/vcs")
+      return { type: "image-location", name: imageName, kind: "vcs" };
+    if (url.pathname === "/api/shell")
+      return { type: "image-location", name: imageName, kind: "list" };
+    if (imageControl(url.pathname)) return { type: "control" };
+  }
   if (workspaceID) return { type: "workspace", workspaceID };
   if (method === "GET" && url.pathname === "/api/gateway/image")
     return { type: "images" };
-  const imageSession = url.pathname.match(
-    /^\/api\/gateway\/image\/([^/]+)\/session$/,
-  );
-  if (method === "POST" && imageSession) {
-    const name = decodePath(imageSession[1]);
-    return name
-      ? { type: "image-session", name }
-      : { type: "unsupported", reason: "invalid gateway image name" };
-  }
   const image = url.pathname.match(/^\/api\/gateway\/image\/([^/]+)$/);
   if (method === "GET" && image) {
     const name = decodePath(image[1]);
@@ -152,6 +160,12 @@ function control(pathname: string) {
     "/api/experimental/integration/wellknown",
     "/api/experimental/migration/v1",
   ].some((prefix) => pathname === prefix || pathname.startsWith(prefix + "/"));
+}
+
+function imageControl(pathname: string) {
+  return ["/api/mcp", "/api/reference", "/api/skill"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
+  );
 }
 
 function workspace(request: Request, url: URL) {

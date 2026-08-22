@@ -9,18 +9,14 @@ function Commands(props: { context: Plugin.Context }) {
     const connection = await server;
     return connection.gateway?.images ?? [];
   };
-  const create = async (name: string) => {
+  const location = async (name: string) => {
     const connection = await server;
     const baseURL = connection.urls[0];
     if (!baseURL) throw new Error("Connected server did not report a URL");
     const password = process.env.OPENCODE_PASSWORD;
     const response = await fetch(
-      new URL(
-        `/api/gateway/image/${encodeURIComponent(name)}/session`,
-        baseURL,
-      ),
+      new URL(`/api/gateway/image/${encodeURIComponent(name)}`, baseURL),
       {
-        method: "POST",
         headers: password
           ? { authorization: `Basic ${btoa(`opencode:${password}`)}` }
           : undefined,
@@ -31,7 +27,8 @@ function Commands(props: { context: Plugin.Context }) {
         `Gateway request failed: ${response.status} ${await response.text()}`,
       );
     return (await response.json()) as {
-      data: { id: string };
+      directory: string;
+      workspaceID: string;
     };
   };
 
@@ -56,13 +53,13 @@ function Commands(props: { context: Plugin.Context }) {
             })),
           });
           if (!name) return;
-          const session = await create(name);
+          const selected = await location(name);
           props.context.ui.router.navigate({
-            type: "session",
-            sessionID: session.data.id,
-          });
+            type: "home",
+            location: selected,
+          } as never);
           props.context.ui.toast.show({
-            message: `Created session from gateway image: ${name}`,
+            message: `Selected gateway image: ${name}`,
             variant: "success",
           });
         },

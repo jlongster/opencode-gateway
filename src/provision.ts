@@ -88,10 +88,9 @@ export function layer(options: {
             const recorded = yield* existing(input.id);
             if (recorded) return recorded;
           }
-          const requestedImage = GatewayImage.candidate(
-            input.location?.directory,
-            options.root,
-          );
+          const requestedImage =
+            GatewayImage.fromWorkspace(input.location?.workspaceID) ??
+            GatewayImage.candidate(input.location?.directory, options.root);
           const requested = yield* registry.findImage(requestedImage);
           const imageName = requested
             ? requestedImage

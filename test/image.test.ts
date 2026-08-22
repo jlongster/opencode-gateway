@@ -7,6 +7,11 @@ test("selects default and named images from virtual directories", () => {
   expect(GatewayImage.select(root, root)).toBe("default");
   expect(GatewayImage.select(`${root}/node-tools`, root)).toBe("node-tools");
   expect(GatewayImage.directory("node-tools", root)).toBe(`${root}/node-tools`);
+  expect(String(GatewayImage.workspace("node-tools"))).toBe(
+    "wrk_image_node-tools",
+  );
+  expect(GatewayImage.fromWorkspace("wrk_image_node-tools")).toBe("node-tools");
+  expect(GatewayImage.fromWorkspace("wrk_real")).toBeUndefined();
 });
 
 test("rejects invalid and nested image selectors", () => {

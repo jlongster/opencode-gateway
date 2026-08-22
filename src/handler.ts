@@ -2,7 +2,6 @@ export * as GatewayHandler from "./handler.js";
 
 import { Workspace } from "@opencode-ai/schema/workspace";
 import { Session } from "@opencode-ai/schema/session";
-import { AbsolutePath } from "@opencode-ai/schema/schema";
 import { Effect, Option, Schema } from "effect";
 import { GatewayAggregate } from "./aggregate.js";
 import { GatewayBackend } from "./backend.js";
@@ -77,6 +76,25 @@ export function handle(request: Request, options: Options) {
         project: { id: "global", directory: root, canonical: root },
       });
     }
+    if (decision.type === "image-location") {
+      const registry = yield* GatewayRegistry.Service;
+      if (!(yield* registry.findImage(decision.name)))
+        return Response.json(
+          { code: "image_not_found", name: decision.name },
+          { status: 404 },
+        );
+      const root = options.root ?? "/root";
+      const location = {
+        directory: root,
+        workspaceID: GatewayImage.workspace(decision.name),
+        project: { id: "global", directory: root, canonical: root },
+      };
+      if (decision.kind === "info") return Response.json(location);
+      return Response.json({
+        location,
+        data: decision.kind === "vcs" ? { branch: {} } : [],
+      });
+    }
     if (decision.type === "images") {
       const registry = yield* GatewayRegistry.Service;
       const images = yield* registry.listImages;
@@ -93,27 +111,10 @@ export function handle(request: Request, options: Options) {
         );
       const root = options.root ?? "/root";
       return Response.json({
-        directory: GatewayImage.directory(decision.name, root),
+        directory: root,
+        workspaceID: GatewayImage.workspace(decision.name),
         project: { id: "global", directory: root, canonical: root },
       });
-    }
-    if (decision.type === "image-session") {
-      const registry = yield* GatewayRegistry.Service;
-      if (!(yield* registry.findImage(decision.name)))
-        return Response.json(
-          { code: "image_not_found", name: decision.name },
-          { status: 404 },
-        );
-      const provision = yield* GatewayProvision.Service;
-      return yield* provisionResponse(
-        provision.create({
-          location: {
-            directory: AbsolutePath.make(
-              GatewayImage.directory(decision.name, options.root ?? "/root"),
-            ),
-          },
-        }),
-      );
     }
     if (decision.type === "sessions") {
       const input = sessionListInput(new URL(request.url));
@@ -249,7 +250,7 @@ function resolveWorkspace(
         | "default-location"
         | "images"
         | "image"
-        | "image-session"
+        | "image-location"
         | "sessions"
         | "active-sessions"
         | "events"

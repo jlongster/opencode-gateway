@@ -4,6 +4,7 @@ import { Event } from "@opencode-ai/schema/event";
 import { Project } from "@opencode-ai/schema/project";
 import { AbsolutePath } from "@opencode-ai/schema/schema";
 import { Session } from "@opencode-ai/schema/session";
+import { Workspace } from "@opencode-ai/schema/workspace";
 import { DateTime, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { mkdtemp, rm } from "fs/promises";
@@ -469,7 +470,7 @@ describe("GatewayHandler", () => {
     }
   });
 
-  test("provisions a session directly from a selected image", async () => {
+  test("carries an image workspace selector into normal provisioning", async () => {
     let input: GatewayProvision.Input | undefined;
     const session = Schema.decodeUnknownSync(Session.Info)(
       sessionInfo("ses_image"),
@@ -494,26 +495,88 @@ describe("GatewayHandler", () => {
         runtime.runPromise(
           GatewayHandler.handle(request, { password, version: "test" }),
         );
+      const selected = await handle(
+        authenticated("http://gateway.test/api/gateway/image/default"),
+      );
+      expect(selected.status).toBe(200);
+      expect(await selected.json()).toEqual({
+        directory: "/root",
+        workspaceID: "wrk_image_default",
+        project: {
+          id: "global",
+          directory: "/root",
+          canonical: "/root",
+        },
+      });
+
+      const location = new URL("http://gateway.test/api/location");
+      location.searchParams.set("location[directory]", "/root");
+      location.searchParams.set("location[workspace]", "wrk_image_default");
+      expect(
+        await (await handle(authenticated(location.toString()))).json(),
+      ).toEqual({
+        directory: "/root",
+        workspaceID: "wrk_image_default",
+        project: {
+          id: "global",
+          directory: "/root",
+          canonical: "/root",
+        },
+      });
+      for (const endpoint of [
+        "/api/shell",
+        "/api/session/global/form/request",
+      ]) {
+        const url = new URL(`http://gateway.test${endpoint}`);
+        url.searchParams.set("location[directory]", "/root");
+        url.searchParams.set("location[workspace]", "wrk_image_default");
+        expect(
+          await (await handle(authenticated(url.toString()))).json(),
+        ).toEqual({
+          location: {
+            directory: "/root",
+            workspaceID: "wrk_image_default",
+            project: {
+              id: "global",
+              directory: "/root",
+              canonical: "/root",
+            },
+          },
+          data: [],
+        });
+      }
+
       const response = await handle(
-        authenticated("http://gateway.test/api/gateway/image/default/session", {
+        authenticated("http://gateway.test/api/session", {
           method: "POST",
+          body: JSON.stringify({
+            agent: "build",
+            model: { providerID: "anthropic", id: "claude" },
+            location: {
+              directory: "/root",
+              workspaceID: "wrk_image_default",
+            },
+          }),
         }),
       );
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ data: sessionInfo("ses_image") });
       expect(input?.location?.directory).toBe(AbsolutePath.make("/root"));
+      expect(input?.location?.workspaceID).toBe(
+        Workspace.ID.make("wrk_image_default"),
+      );
+      expect(String(input?.agent)).toBe("build");
+      expect(String(input?.model?.providerID)).toBe("anthropic");
+      expect(String(input?.model?.id)).toBe("claude");
 
       const missing = await handle(
-        authenticated("http://gateway.test/api/gateway/image/missing/session", {
-          method: "POST",
-        }),
+        authenticated("http://gateway.test/api/gateway/image/missing"),
       );
       expect(missing.status).toBe(404);
       expect(await missing.json()).toEqual({
         code: "image_not_found",
         name: "missing",
       });
-      expect(input?.location?.directory).toBe(AbsolutePath.make("/root"));
     } finally {
       await runtime.dispose();
     }
