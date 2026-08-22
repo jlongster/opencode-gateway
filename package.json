@@ -26,11 +26,13 @@
     "modal": "0.9.0"
   },
   "devDependencies": {
+    "@opencode-ai/plugin": "0.0.0-next-17444",
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "1.3.13",
     "@types/node": "24.12.2",
     "oxlint": "1.60.0",
     "prettier": "3.6.2",
+    "solid-js": "1.9.10",
     "typescript": "5.8.2"
   }
 }

@@ -18,6 +18,31 @@ Start and authenticate the normal local OpenCode service. The gateway uses it fo
 opencode2 service start
 ```
 
+## Install the Image plugin
+
+Install the gateway TUI plugin on each machine that connects to the gateway:
+
+```sh
+cp plugins/gateway-image.ts ~/.config/opencode/gateway-image.ts
+```
+
+Add it to the `plugins` array in `~/.config/opencode/cli.json`, setting `baseURL` to that machine's gateway URL:
+
+```json
+{
+  "plugins": [
+    {
+      "package": "/home/you/.config/opencode/gateway-image.ts",
+      "options": {
+        "baseURL": "http://127.0.0.1:4097"
+      }
+    }
+  ]
+}
+```
+
+Use the absolute path to your home directory; OpenCode does not expand `~` in plugin paths. Restart the TUI after installing it. The plugin selects the default gateway Image on the home screen and adds the `/image` command for selecting named Images.
+
 ## Start
 
 From this repository:
