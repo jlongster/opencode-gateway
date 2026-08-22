@@ -113,9 +113,15 @@ const fromClient = Layer.effect(
         upstream_project_id TEXT NOT NULL,
         parent_id TEXT,
         time_created INTEGER NOT NULL,
-        time_updated INTEGER NOT NULL
+        time_updated INTEGER NOT NULL,
+        info TEXT
       )
     `;
+    const sessionColumns = yield* sql<{
+      name: string;
+    }>`PRAGMA table_info(session_binding)`;
+    if (!sessionColumns.some((column) => column.name === "info"))
+      yield* sql`ALTER TABLE session_binding ADD COLUMN info TEXT`;
     yield* sql`
       CREATE INDEX IF NOT EXISTS session_binding_workspace_idx
       ON session_binding(workspace_id, time_updated DESC)

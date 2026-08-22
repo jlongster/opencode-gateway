@@ -104,6 +104,7 @@ export const layer = Layer.effect(
               parentID: session.parentID,
               timeCreated: DateTime.toEpochMillis(session.time.created),
               timeUpdated: DateTime.toEpochMillis(session.time.updated),
+              info: session,
             })
             .pipe(
               Effect.catch((error) =>

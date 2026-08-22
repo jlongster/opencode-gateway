@@ -138,6 +138,7 @@ function control(pathname: string) {
     "/api/credential",
     "/api/plugin",
     "/api/config",
+    "/api/command",
     "/api/experimental/integration/wellknown",
     "/api/experimental/migration/v1",
   ].some((prefix) => pathname === prefix || pathname.startsWith(prefix + "/"));

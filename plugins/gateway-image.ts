@@ -2,12 +2,12 @@ import { Plugin } from "@opencode-ai/plugin/tui";
 import { onCleanup, onMount } from "solid-js";
 
 function Commands(props: { context: Plugin.Context }) {
-  const baseURL =
-    typeof props.context.options.baseURL === "string"
-      ? props.context.options.baseURL
-      : "http://127.0.0.1:4097";
+  const server = props.context.client.server.get();
   const password = process.env.OPENCODE_PASSWORD;
   const request = async <Value>(pathname: string) => {
+    const connection = await server;
+    const baseURL = connection.urls[0];
+    if (!baseURL) throw new Error("Connected server did not report a URL");
     const response = await fetch(new URL(pathname, baseURL), {
       headers: password
         ? { authorization: `Basic ${btoa(`opencode:${password}`)}` }

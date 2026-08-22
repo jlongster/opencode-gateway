@@ -16,6 +16,8 @@ import { GatewayRouter } from "./router.js";
 const decodeWorkspaceID = Schema.decodeUnknownOption(Workspace.ID);
 const encodeSessions = Schema.encodeSync(Schema.Array(Session.Info));
 const encodeSession = Schema.encodeSync(Session.Info);
+const decodeSession = Schema.decodeUnknownSync(Session.Info);
+const decodeSessionOption = Schema.decodeUnknownOption(Session.Info);
 const decodeProvision = Schema.decodeUnknownOption(GatewayProvision.Input);
 const hopByHop = [
   "connection",
@@ -60,12 +62,8 @@ export function handle(request: Request, options: Options) {
         root,
       );
       const registry = yield* GatewayRegistry.Service;
-      if (!(yield* registry.findImage(requestedName)))
-        return Response.json(
-          { code: "image_not_found", name: requestedName },
-          { status: 404 },
-        );
-      const name = requestedName;
+      const requestedImage = yield* registry.findImage(requestedName);
+      const name = requestedImage ? requestedName : GatewayImage.DefaultName;
       const directory = GatewayImage.directory(name, root);
       return Response.json({
         directory,
@@ -95,9 +93,52 @@ export function handle(request: Request, options: Options) {
     if (decision.type === "sessions") {
       const input = sessionListInput(new URL(request.url));
       if (input instanceof Response) return input;
-      const aggregate = yield* GatewayAggregate.Service;
-      const sessions = yield* aggregate.sessions(input);
-      return Response.json({ data: encodeSessions(sessions), cursor: {} });
+      const registry = yield* GatewayRegistry.Service;
+      const bindings = (yield* registry.listSessions).filter(
+        (session) =>
+          (!input.workspaceID || session.workspaceID === input.workspaceID) &&
+          (input.parentID === undefined ||
+            (input.parentID === null
+              ? session.parentID === undefined
+              : session.parentID === input.parentID)),
+      );
+      const sessions = yield* Effect.forEach(bindings, (binding) =>
+        binding.info
+          ? Effect.succeed(binding.info)
+          : registry.getWorkspace(binding.workspaceID).pipe(
+              Effect.map((workspace) =>
+                decodeSession({
+                  id: binding.id,
+                  ...(binding.parentID ? { parentID: binding.parentID } : {}),
+                  projectID: binding.projectID,
+                  cost: 0,
+                  tokens: {
+                    input: 0,
+                    output: 0,
+                    reasoning: 0,
+                    cache: { read: 0, write: 0 },
+                  },
+                  time: binding.time,
+                  location: {
+                    directory: workspace?.directory ?? options.root ?? "/root",
+                    workspaceID: binding.workspaceID,
+                  },
+                }),
+              ),
+            ),
+      );
+      const search = input.search?.toLowerCase();
+      const filtered = search
+        ? sessions.filter(
+            (session) =>
+              session.id.toLowerCase().includes(search) ||
+              session.title?.toLowerCase().includes(search),
+          )
+        : sessions;
+      const ordered = input.order === "asc" ? filtered.toReversed() : filtered;
+      const selected =
+        input.limit === undefined ? ordered : ordered.slice(0, input.limit);
+      return Response.json({ data: encodeSessions(selected), cursor: {} });
     }
     if (decision.type === "active-sessions") {
       const aggregate = yield* GatewayAggregate.Service;
@@ -507,8 +548,9 @@ function registerSessionResponses(
       : [body.data];
   return Effect.forEach(
     values.filter(sessionValue),
-    (session) =>
-      registry.registerSession({
+    (session) => {
+      const info = Option.getOrUndefined(decodeSessionOption(session));
+      return registry.registerSession({
         id: session.id,
         workspaceID,
         projectID: session.projectID,
@@ -516,7 +558,9 @@ function registerSessionResponses(
           typeof session.parentID === "string" ? session.parentID : undefined,
         timeCreated: session.time.created,
         timeUpdated: session.time.updated,
-      }),
+        info,
+      });
+    },
     { discard: true },
   );
 }

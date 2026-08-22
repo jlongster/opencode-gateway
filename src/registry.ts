@@ -1,6 +1,7 @@
 export * as GatewayRegistry from "./registry.js";
 
 import { Workspace } from "@opencode-ai/schema/workspace";
+import { Session } from "@opencode-ai/schema/session";
 import { Context, Effect, Layer, Schema } from "effect";
 import { randomUUID } from "node:crypto";
 import { GatewayDatabase } from "./database.js";
@@ -44,6 +45,7 @@ export interface SessionBinding {
   readonly projectID: string;
   readonly parentID?: string;
   readonly time: { readonly created: number; readonly updated: number };
+  readonly info?: Session.Info;
 }
 
 export interface QuarantinedSandbox {
@@ -190,6 +192,7 @@ export interface Interface {
     readonly parentID?: string;
     readonly timeCreated: number;
     readonly timeUpdated: number;
+    readonly info?: Session.Info;
   }) => Effect.Effect<
     SessionBinding,
     WorkspaceNotFoundError | OwnershipConflictError
@@ -302,6 +305,7 @@ type SessionRow = {
   parent_id: string | null;
   time_created: number;
   time_updated: number;
+  info: string | null;
 };
 
 type ImageRow = {
@@ -361,6 +365,9 @@ function session(row: SessionRow): SessionBinding {
     projectID: row.upstream_project_id,
     parentID: row.parent_id ?? undefined,
     time: { created: row.time_created, updated: row.time_updated },
+    info: row.info
+      ? Schema.decodeUnknownSync(Session.Info)(JSON.parse(row.info))
+      : undefined,
   };
 }
 
@@ -669,6 +676,7 @@ export const layer = Layer.effect(
         readonly parentID?: string;
         readonly timeCreated: number;
         readonly timeUpdated: number;
+        readonly info?: Session.Info;
       }) {
         yield* requireWorkspace(input.workspaceID);
         const existing = yield* sql<{
@@ -686,15 +694,16 @@ export const layer = Layer.effect(
           });
         yield* sql`
         INSERT INTO session_binding (
-          id, workspace_id, upstream_project_id, parent_id, time_created, time_updated
+          id, workspace_id, upstream_project_id, parent_id, time_created, time_updated, info
         ) VALUES (
           ${input.id}, ${input.workspaceID}, ${input.projectID}, ${input.parentID ?? null},
-          ${input.timeCreated}, ${input.timeUpdated}
+          ${input.timeCreated}, ${input.timeUpdated}, ${input.info ? JSON.stringify(Schema.encodeSync(Session.Info)(input.info)) : null}
         )
         ON CONFLICT(id) DO UPDATE SET
           upstream_project_id = excluded.upstream_project_id,
           parent_id = excluded.parent_id,
-          time_updated = excluded.time_updated
+          time_updated = excluded.time_updated,
+          info = COALESCE(excluded.info, session_binding.info)
       `.pipe(Effect.orDie);
         const rows =
           yield* sql<SessionRow>`SELECT * FROM session_binding WHERE id = ${input.id}`.pipe(

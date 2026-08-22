@@ -251,6 +251,12 @@ describe("GatewayHandler", () => {
         data: [],
       });
 
+      const commandResponse = await handle(
+        authenticated("http://gateway.test/api/command"),
+      );
+      expect(commandResponse.status).toBe(202);
+      expect((await commandResponse.json()).path).toBe("/api/command");
+
       const sessionResponse = await handle(
         authenticated("http://gateway.test/api/session/ses_first"),
       );
@@ -332,7 +338,7 @@ describe("GatewayHandler", () => {
       });
 
       expect(firstRequests.count).toBe(10);
-      expect(secondRequests.count).toBe(3);
+      expect(secondRequests.count).toBe(2);
     } finally {
       await runtime.dispose();
     }
@@ -402,6 +408,33 @@ describe("GatewayHandler", () => {
       );
       expect(location.status).toBe(200);
       expect(await location.json()).toEqual({
+        directory: "/root",
+        project: {
+          id: "global",
+          directory: "/root",
+          canonical: "/root",
+        },
+      });
+      const externalLocation = new URL("http://gateway.test/api/location");
+      externalLocation.searchParams.set(
+        "location[directory]",
+        "/home/client/projects/opencode-gateway",
+      );
+      expect(
+        await (await handle(authenticated(externalLocation.toString()))).json(),
+      ).toEqual({
+        directory: "/root",
+        project: {
+          id: "global",
+          directory: "/root",
+          canonical: "/root",
+        },
+      });
+      const unknownImage = new URL("http://gateway.test/api/location");
+      unknownImage.searchParams.set("location[directory]", "/root/missing");
+      expect(
+        await (await handle(authenticated(unknownImage.toString()))).json(),
+      ).toEqual({
         directory: "/root",
         project: {
           id: "global",

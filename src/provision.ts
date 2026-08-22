@@ -147,6 +147,10 @@ export function layer(options: {
               parentID: session.parentID,
               timeCreated: DateTime.toEpochMillis(session.time.created),
               timeUpdated: DateTime.toEpochMillis(session.time.updated),
+              info: {
+                ...session,
+                location: { ...session.location, workspaceID: workspace.id },
+              },
             });
             return {
               ...session,
