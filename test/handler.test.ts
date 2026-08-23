@@ -10,6 +10,7 @@ import { FetchHttpClient } from "effect/unstable/http";
 import { mkdtemp, rm } from "fs/promises";
 import os from "os";
 import path from "path";
+import { brotliCompressSync } from "zlib";
 import { GatewayAggregate } from "../src/aggregate";
 import { GatewayBackend } from "../src/backend";
 import { GatewayControl } from "../src/control";
@@ -82,17 +83,29 @@ describe("GatewayHandler", () => {
         firstRequests.count++;
         const url = new URL(request.url);
         if (url.pathname === "/api/model")
-          return Response.json({
-            location: {
-              directory: "/persist/project",
-              project: {
-                id: "same-project",
-                directory: "/persist/project",
-                canonical: "/persist/project",
+          return new Response(
+            new Uint8Array(
+              brotliCompressSync(
+                JSON.stringify({
+                  location: {
+                    directory: "/persist/project",
+                    project: {
+                      id: "same-project",
+                      directory: "/persist/project",
+                      canonical: "/persist/project",
+                    },
+                  },
+                  data: [],
+                }),
+              ),
+            ),
+            {
+              headers: {
+                "content-encoding": "br",
+                "content-type": "application/json",
               },
             },
-            data: [],
-          });
+          );
         if (url.pathname === "/api/session/ses_first")
           return Response.json({
             data: {
@@ -240,6 +253,7 @@ describe("GatewayHandler", () => {
           headers: { "x-opencode-workspace": workspaces.first.id },
         }),
       );
+      expect(locationResponse.headers.get("content-encoding")).toBeNull();
       expect(await locationResponse.json()).toEqual({
         location: {
           directory: "/persist/project",

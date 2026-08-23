@@ -361,6 +361,7 @@ function proxyControl(
       headers.delete("x-opencode-workspace");
       headers.delete("x-opencode-directory");
       hopByHop.forEach((header) => headers.delete(header));
+      headers.set("accept-encoding", "identity");
       Object.entries(connection.headers).forEach(([name, value]) =>
         headers.set(name, value),
       );
@@ -376,6 +377,8 @@ function proxyControl(
       });
       const responseHeaders = new Headers(response.headers);
       hopByHop.forEach((header) => responseHeaders.delete(header));
+      responseHeaders.delete("content-encoding");
+      responseHeaders.delete("content-length");
       if (
         !response.ok ||
         response.status === 204 ||
@@ -469,6 +472,7 @@ function proxy(
       headers.delete("host");
       headers.delete("x-opencode-workspace");
       hopByHop.forEach((header) => headers.delete(header));
+      headers.set("accept-encoding", "identity");
       Object.entries(connection.headers).forEach(([name, value]) =>
         headers.set(name, value),
       );
@@ -484,6 +488,8 @@ function proxy(
       });
       const responseHeaders = new Headers(response.headers);
       hopByHop.forEach((header) => responseHeaders.delete(header));
+      responseHeaders.delete("content-encoding");
+      responseHeaders.delete("content-length");
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
