@@ -51,6 +51,7 @@ export class Service extends Context.Service<Service, Interface>()(
 export function layer(options: {
   readonly root: string;
   readonly upstreamPassword: string;
+  readonly gateway?: GatewayModal.GatewayConnection;
 }) {
   return Layer.effect(
     Service,
@@ -113,6 +114,7 @@ export function layer(options: {
               volumeSubpath: workspace.volumeSubpath,
               root: options.root,
               upstreamPassword: options.upstreamPassword,
+              gateway: options.gateway,
               credentials: credentials.snapshot,
               imageID: image.imageID,
             })
@@ -199,6 +201,7 @@ export function layer(options: {
               volumeSubpath: workspace.volumeSubpath,
               root: options.root,
               upstreamPassword: options.upstreamPassword,
+              gateway: options.gateway,
               credentials: credentials.snapshot,
               imageID: selected.image.imageID,
             });

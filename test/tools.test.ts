@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event";
 import { Session } from "@opencode-ai/schema/session";
+import { Workspace } from "@opencode-ai/schema/workspace";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -204,7 +205,9 @@ test("snapshots a named image once for replayed native tool events", async () =>
     });
     await eventually(() => responses.length === 4);
     expect(creations).toHaveLength(1);
-    expect(creations[0]?.location?.workspaceID).toBe("wrk_image_node-tools");
+    expect(creations[0]?.location?.workspaceID).toBe(
+      Workspace.ID.make("wrk_image_node-tools"),
+    );
     expect(responses[3]).toMatchObject({
       ok: true,
       result: {

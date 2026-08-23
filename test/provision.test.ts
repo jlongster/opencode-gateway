@@ -166,6 +166,10 @@ test("restores a missing workspace from its named image", async () => {
   const provision = GatewayProvision.layer({
     root: "/persist/project",
     upstreamPassword: "secret",
+    gateway: {
+      url: "https://gateway.example.com",
+      password: "gateway-secret",
+    },
   }).pipe(Layer.provide(dependencies));
   const runtime = ManagedRuntime.make(Layer.merge(dependencies, provision));
 
@@ -203,6 +207,10 @@ test("restores a missing workspace from its named image", async () => {
     expect(created).toHaveLength(1);
     expect(created[0]?.imageID).toBe("im_node_tools");
     expect(created[0]?.generation).toBe(2);
+    expect(created[0]?.gateway).toEqual({
+      url: "https://gateway.example.com",
+      password: "gateway-secret",
+    });
     const sandboxes = await runtime.runPromise(
       GatewayRegistry.Service.use((registry) => registry.listSandboxes),
     );

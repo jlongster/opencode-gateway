@@ -25,6 +25,7 @@ export interface Options {
   readonly upstreamPort?: number;
   readonly root?: string;
   readonly upstreamPassword?: string;
+  readonly externalURL?: string;
   readonly credentialDatabase: string;
   readonly controlPlane: GatewayBackend.Connection;
 }
@@ -64,6 +65,12 @@ export const start = Effect.fn("GatewayProcess.start")(function* (
   const provision = GatewayProvision.layer({
     root: options.root ?? "/root",
     upstreamPassword,
+    gateway: options.externalURL
+      ? {
+          url: options.externalURL,
+          password: options.password,
+        }
+      : undefined,
   }).pipe(Layer.provide(provisionDependencies));
   const services = Layer.mergeAll(
     upstream,

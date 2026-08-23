@@ -67,6 +67,35 @@ OPENCODE_PASSWORD="$OPENCODE_GATEWAY_PASSWORD" \
 
 The home screen reads its agent/model/provider/integration catalog from the local OpenCode control plane. Submitting the first prompt calls `POST /api/session`, which creates a workspace subpath and Modal sandbox, starts OpenCode, registers the initial session, and begins proxying its event stream.
 
+## Connect from sandboxes through OpenTunnel
+
+To let gateway sandboxes call the gateway without opening an inbound port on the gateway host, create a persistent [OpenTunnel](https://opentunnel.xyz) route to the local listener:
+
+```sh
+bun install -g @opentunnel/cli
+opentunnel --profile opencode-gateway create
+opentunnel --profile opencode-gateway route add gateway 127.0.0.1:4097
+opentunnel --profile opencode-gateway serve
+```
+
+Run `opentunnel serve` under the host's service manager. Set the generated route URL before starting the gateway:
+
+```sh
+export OPENCODE_GATEWAY_URL="https://gateway.TUNNEL_ID.opentunnel.xyz"
+```
+
+The gateway injects that URL and `OPENCODE_GATEWAY_PASSWORD` into every new or resumed sandbox. From a sandbox, route a request to another workspace with:
+
+```sh
+OPENCODE_PASSWORD="$OPENCODE_GATEWAY_PASSWORD" \
+  opencode2 api \
+    --server "$OPENCODE_GATEWAY_URL" \
+    --header "x-opencode-workspace:$TARGET_WORKSPACE_ID" \
+    get /api/location
+```
+
+Already-running sandboxes must be restarted before they receive newly configured environment variables.
+
 The root-config `/image` command lists gateway Images and their descriptions in a searchable picker. The built-in Image is named `default`; selecting a named Image creates the next workspace from that Modal filesystem snapshot. Inside a workspace, OpenCode starts in `/root` and filesystem requests route to its Modal VM. Project files, configuration, cache, and other VM state are ephemeral unless captured in a named filesystem snapshot. Only `opencode.db` is persisted, at `/opencode/opencode.db` on the workspace's Volume subpath. Deleting the session deletes that database and terminates its sandbox.
 
 Each sandbox loads three direct, non-CodeMode gateway tools. `gateway_image_snapshot` requires an immutable name and a description of the image's contents and intended use. `gateway_image_list` returns the available images with those descriptions. `gateway_session_create` creates a session in a new workspace from a selected image. The gateway receives each native tool event, performs the operation, records its durable result, and returns it to the waiting tool. Snapshotting does not terminate the VM.

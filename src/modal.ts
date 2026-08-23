@@ -42,6 +42,7 @@ export interface Interface {
     readonly volumeSubpath: string;
     readonly root: string;
     readonly upstreamPassword: string;
+    readonly gateway?: GatewayConnection;
     readonly credentials: Snapshot;
     readonly imageID?: string;
   }) => Effect.Effect<{ readonly id: string }, ModalError>;
@@ -62,6 +63,11 @@ export interface Interface {
     sandboxID: string,
   ) => Effect.Effect<void, ModalError>;
   readonly terminate: (sandboxID: string) => Effect.Effect<void, ModalError>;
+}
+
+export interface GatewayConnection {
+  readonly url: string;
+  readonly password: string;
 }
 
 export class Service extends Context.Service<Service, Interface>()(
@@ -254,6 +260,7 @@ export function layer(options: Options) {
         readonly volumeSubpath: string;
         readonly root: string;
         readonly upstreamPassword: string;
+        readonly gateway?: GatewayConnection;
         readonly credentials: Snapshot;
         readonly imageID?: string;
       }) {
@@ -284,6 +291,12 @@ export function layer(options: Options) {
                 env: {
                   OPENCODE_PASSWORD: input.upstreamPassword,
                   OPENCODE_DB: "/opencode/opencode.db",
+                  ...(input.gateway
+                    ? {
+                        OPENCODE_GATEWAY_URL: input.gateway.url,
+                        OPENCODE_GATEWAY_PASSWORD: input.gateway.password,
+                      }
+                    : {}),
                   OPENCODE_CONFIG_CONTENT: JSON.stringify({
                     plugins: ["/tmp/opencode-gateway-plugin.js"],
                   }),
@@ -326,6 +339,12 @@ export function layer(options: Options) {
                 sandbox.filesystem.writeText(
                   gatewayPlugin,
                   "/tmp/opencode-gateway-plugin.js",
+                ),
+              );
+              yield* request("sandbox.writeGatewayInstructions", () =>
+                sandbox.filesystem.writeText(
+                  gatewayInstructions,
+                  "/tmp/opencode-gateway-AGENTS.md",
                 ),
               );
               yield* request("sandbox.writeCredentials", () =>
@@ -425,7 +444,14 @@ function bootstrap(input: { readonly root: string }) {
     'kill -TERM "$bootstrap_pid"',
     'wait "$bootstrap_pid" || true',
     "bun /tmp/opencode-credential-import.ts /tmp/opencode-credentials.json",
+    `agents=${quote(`${input.root.replace(/\/$/, "")}/AGENTS.md`)}`,
+    'agents_tmp="$(mktemp)"',
+    'if [ -f "$agents" ]; then sed \'/^<!-- opencode-gateway:start -->$/,/^<!-- opencode-gateway:end -->$/d\' "$agents" > "$agents_tmp"; fi',
+    "printf '\\n' >> \"$agents_tmp\"",
+    'cat /tmp/opencode-gateway-AGENTS.md >> "$agents_tmp"',
+    'mv "$agents_tmp" "$agents"',
     "rm -f /tmp/opencode-credential-import.ts /tmp/opencode-credentials.json",
+    "rm -f /tmp/opencode-gateway-AGENTS.md",
     "exec opencode2 serve --hostname 0.0.0.0 --port 4096",
   ].join("\n");
 }
@@ -538,6 +564,13 @@ export default Plugin.define({
     })
   },
 })
+`;
+
+const gatewayInstructions = `<!-- opencode-gateway:start -->
+## OpenCode Gateway
+
+When using the OpenCode API from this sandbox, always run \`opencode2 api\` with \`--server "$OPENCODE_GATEWAY_URL"\` and set \`OPENCODE_PASSWORD="$OPENCODE_GATEWAY_PASSWORD"\`.
+<!-- opencode-gateway:end -->
 `;
 
 const credentialImporter = `

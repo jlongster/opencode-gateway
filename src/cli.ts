@@ -24,6 +24,7 @@ const args = parseArgs({
 
 const password = process.env.OPENCODE_GATEWAY_PASSWORD;
 if (!password) throw new Error("OPENCODE_GATEWAY_PASSWORD is required");
+const externalURL = externalGatewayURL(process.env.OPENCODE_GATEWAY_URL);
 const data = path.join(
   process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
   "opencode",
@@ -44,6 +45,7 @@ const program = Effect.gen(function* () {
     password,
     upstreamPassword:
       process.env.OPENCODE_GATEWAY_UPSTREAM_PASSWORD ?? password,
+    externalURL,
     version: "0.1.0",
     database:
       args.values.database ??
@@ -68,3 +70,19 @@ const program = Effect.gen(function* () {
 });
 
 NodeRuntime.runMain(Effect.scoped(program));
+
+function externalGatewayURL(value: string | undefined) {
+  if (!value) return undefined;
+  const url = new URL(value);
+  if (url.protocol !== "https:" && url.protocol !== "http:")
+    throw new Error("OPENCODE_GATEWAY_URL must use HTTP or HTTPS");
+  if (
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  )
+    throw new Error("OPENCODE_GATEWAY_URL must be an origin without a path");
+  return url.origin;
+}
