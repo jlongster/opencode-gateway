@@ -1,6 +1,6 @@
 export * as GatewayProcess from "./process.js";
 
-import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { GatewayAggregate } from "./aggregate.js";
 import { GatewayBackend } from "./backend.js";
@@ -52,11 +52,7 @@ export const start = Effect.fn("GatewayProcess.start")(function* (
   }).pipe(Layer.provide(dependencies));
   const upstream = Layer.merge(dependencies, backend);
   const aggregate = GatewayAggregate.layer.pipe(Layer.provide(upstream));
-  const provisionDeferred = yield* Deferred.make<GatewayProvision.Interface>();
-  const tools = GatewayTools.layer({
-    provision: Deferred.await(provisionDeferred),
-    root: options.root ?? "/root",
-  }).pipe(Layer.provide(upstream));
+  const tools = GatewayTools.layer().pipe(Layer.provide(upstream));
   const eventDependencies = Layer.merge(upstream, tools);
   const events = GatewayEvents.layer({ root: options.root }).pipe(
     Layer.provide(eventDependencies),
@@ -82,8 +78,6 @@ export const start = Effect.fn("GatewayProcess.start")(function* (
   const startup = GatewayReconcile.run().pipe(
     Effect.andThen(
       Effect.gen(function* () {
-        const provision = yield* GatewayProvision.Service;
-        yield* Deferred.succeed(provisionDeferred, provision);
         const events = yield* GatewayEvents.Service;
         yield* events.watchControl(options.controlPlane);
         yield* events.start;

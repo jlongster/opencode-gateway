@@ -98,7 +98,7 @@ Already-running sandboxes must be restarted before they receive newly configured
 
 The root-config `/image` command lists gateway Images and their descriptions in a searchable picker. The built-in Image is named `default`; selecting a named Image creates the next workspace from that Modal filesystem snapshot. Inside a workspace, OpenCode starts in `/root` and filesystem requests route to its Modal VM. Project files, configuration, cache, and other VM state are ephemeral unless captured in a named filesystem snapshot. Only `opencode.db` is persisted, at `/opencode/opencode.db` on the workspace's Volume subpath. Deleting the session deletes that database and terminates its sandbox.
 
-Each sandbox loads three direct, non-CodeMode gateway tools. `gateway_image_snapshot` requires an immutable name and a description of the image's contents and intended use. `gateway_image_list` returns the available images with those descriptions. `gateway_session_create` creates a session in a new workspace from a selected image. The gateway receives each native tool event, performs the operation, records its durable result, and returns it to the waiting tool. Snapshotting does not terminate the VM.
+Each sandbox loads two direct, non-CodeMode gateway tools. `gateway_image_snapshot` requires an immutable name and a description of the image's contents and intended use. `gateway_image_list` returns the available images with those descriptions. The gateway receives each native tool event, performs the operation, records its durable result, and returns it to the waiting tool. Snapshotting does not terminate the VM. Sandboxes create sessions through the gateway's normal OpenCode API.
 
 Session creation can also be called directly:
 

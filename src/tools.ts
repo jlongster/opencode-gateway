@@ -2,20 +2,12 @@ export * as GatewayTools from "./tools.js";
 
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event";
 import { Cause, Context, Effect, Layer, Scope, Semaphore } from "effect";
-import { AbsolutePath } from "@opencode-ai/schema/schema";
-import { GatewayImage } from "./image.js";
 import { GatewayModal } from "./modal.js";
-import { GatewayProvision } from "./provision.js";
 import { GatewayRegistry } from "./registry.js";
 
 const SnapshotTool = "gateway_image_snapshot";
 const ImageListTool = "gateway_image_list";
-const SessionCreateTool = "gateway_session_create";
-const supported: ReadonlySet<string> = new Set([
-  SnapshotTool,
-  ImageListTool,
-  SessionCreateTool,
-]);
+const supported: ReadonlySet<string> = new Set([SnapshotTool, ImageListTool]);
 
 export interface Interface {
   readonly observe: (
@@ -28,10 +20,7 @@ export class Service extends Context.Service<Service, Interface>()(
   "@opencode/gateway/Tools",
 ) {}
 
-export function layer(options: {
-  readonly provision: Effect.Effect<GatewayProvision.Interface>;
-  readonly root: string;
-}) {
+export function layer() {
   return Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -268,34 +257,6 @@ export function layer(options: {
           ),
         );
 
-      const executeSessionCreate = (call: GatewayRegistry.GatewayToolCall) =>
-        executeSimple(call, (claimed) =>
-          Effect.gen(function* () {
-            const input = sessionCreateInput(claimed.input);
-            if (!input)
-              return yield* Effect.fail(new Error("Image is required"));
-            if (!(yield* registry.findImage(input.image)))
-              return yield* new GatewayRegistry.ImageNotFoundError({
-                name: input.image,
-              });
-            const provision = yield* options.provision;
-            const session = yield* provision.create({
-              ...(input.title ? { title: input.title } : {}),
-              location: {
-                directory: AbsolutePath.make(options.root),
-                workspaceID: GatewayImage.workspace(input.image),
-              },
-            });
-            return {
-              tool: SessionCreateTool,
-              image: input.image,
-              sessionID: session.id,
-              workspaceID: session.location.workspaceID,
-              title: session.title,
-            };
-          }),
-        );
-
       const observe = Effect.fn("GatewayTools.observe")(function* (
         event: OpenCodeEvent,
         source: GatewayRegistry.SandboxInfo,
@@ -326,9 +287,7 @@ export function layer(options: {
         const operation =
           call.tool === SnapshotTool
             ? executeSnapshot(call, source)
-            : call.tool === ImageListTool
-              ? executeImageList(call)
-              : executeSessionCreate(call);
+            : executeImageList(call);
         yield* operation.pipe(Effect.forkIn(scope));
       });
 
@@ -348,21 +307,6 @@ function snapshotDescription(input: unknown) {
   return typeof input.description === "string" && input.description.trim()
     ? input.description.trim()
     : undefined;
-}
-
-function sessionCreateInput(input: unknown) {
-  if (
-    typeof input !== "object" ||
-    input === null ||
-    !("image" in input) ||
-    typeof input.image !== "string"
-  )
-    return;
-  const title =
-    "title" in input && typeof input.title === "string"
-      ? input.title.trim()
-      : undefined;
-  return { image: input.image, title: title || undefined };
 }
 
 function errorText(value: unknown) {

@@ -1,14 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event";
-import { Session } from "@opencode-ai/schema/session";
-import { Workspace } from "@opencode-ai/schema/workspace";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { GatewayDatabase } from "../src/database";
 import { GatewayModal } from "../src/modal";
-import { GatewayProvision } from "../src/provision";
 import { GatewayRegistry } from "../src/registry";
 import { GatewayTools } from "../src/tools";
 
@@ -32,7 +29,6 @@ test("snapshots a named image once for replayed native tool events", async () =>
   });
   const registry = GatewayRegistry.layer.pipe(Layer.provide(database));
   const snapshots = { count: 0 };
-  const creations: GatewayProvision.Input[] = [];
   const responses: unknown[] = [];
   const modal = Layer.succeed(
     GatewayModal.Service,
@@ -59,33 +55,7 @@ test("snapshots a named image once for replayed native tool events", async () =>
     }),
   );
   const dependencies = Layer.merge(registry, modal);
-  const createdSession = Schema.decodeUnknownSync(Session.Info)({
-    id: "ses_created",
-    projectID: "global",
-    cost: 0,
-    tokens: {
-      input: 0,
-      output: 0,
-      reasoning: 0,
-      cache: { read: 0, write: 0 },
-    },
-    time: { created: 1, updated: 1 },
-    title: "Investigate tests",
-    location: { directory: "/root", workspaceID: "wrk_created" },
-  });
-  const tools = GatewayTools.layer({
-    root: "/root",
-    provision: Effect.succeed(
-      GatewayProvision.Service.of({
-        create: (input) => {
-          creations.push(input);
-          return Effect.succeed(createdSession);
-        },
-        resume: () => Effect.die(new Error("not used")),
-        terminate: () => Effect.die(new Error("not used")),
-      }),
-    ),
-  }).pipe(Layer.provide(dependencies));
+  const tools = GatewayTools.layer().pipe(Layer.provide(dependencies));
   const runtime = ManagedRuntime.make(Layer.merge(dependencies, tools));
   const observeTool = (
     source: GatewayRegistry.SandboxInfo,
@@ -199,30 +169,11 @@ test("snapshots a named image once for replayed native tool events", async () =>
       },
     });
 
-    await observeTool(source, "gateway_session_create", "call_create", {
-      image: "node-tools",
-      title: "Investigate tests",
-    });
-    await eventually(() => responses.length === 4);
-    expect(creations).toHaveLength(1);
-    expect(creations[0]?.location?.workspaceID).toBe(
-      Workspace.ID.make("wrk_image_node-tools"),
-    );
-    expect(responses[3]).toMatchObject({
-      ok: true,
-      result: {
-        image: "node-tools",
-        sessionID: "ses_created",
-        workspaceID: "wrk_created",
-        title: "Investigate tests",
-      },
-    });
-
     await observeTool(source, "gateway_image_snapshot", "call_invalid", {
       name: "missing-description",
     });
-    await eventually(() => responses.length === 5);
-    expect(responses[4]).toMatchObject({
+    await eventually(() => responses.length === 4);
+    expect(responses[3]).toMatchObject({
       ok: false,
       error: expect.stringContaining("Image description is required"),
     });

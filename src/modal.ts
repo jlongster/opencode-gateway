@@ -534,33 +534,6 @@ export default Plugin.define({
         },
         execute,
       })
-      tools.add({
-        name: "session_create",
-        options: {
-          namespace: "gateway",
-          permission: "gateway.session_create",
-          codemode: false,
-        },
-        description: "Create a session in a new workspace from a selected gateway image. Call gateway_image_list first.",
-        input: {
-          type: "object",
-          properties: {
-            image: {
-              type: "string",
-              pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
-              description: "Image name returned by gateway_image_list.",
-            },
-            title: {
-              type: "string",
-              minLength: 1,
-              description: "Optional title for the new session.",
-            },
-          },
-          required: ["image"],
-          additionalProperties: false,
-        },
-        execute,
-      })
     })
   },
 })
