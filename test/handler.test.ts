@@ -218,7 +218,11 @@ describe("GatewayHandler", () => {
       );
       const handle = (request: Request) =>
         runtime.runPromise(
-          GatewayHandler.handle(request, { password, version: "test" }),
+          GatewayHandler.handle(request, {
+            password,
+            version: "test",
+            externalURL: "https://gateway.example.com",
+          }),
         );
 
       const firstResponse = await handle(
@@ -380,7 +384,11 @@ describe("GatewayHandler", () => {
     try {
       const handle = (request: Request) =>
         runtime.runPromise(
-          GatewayHandler.handle(request, { password, version: "test" }),
+          GatewayHandler.handle(request, {
+            password,
+            version: "test",
+            externalURL: "https://gateway.example.com",
+          }),
         );
 
       expect(
@@ -429,7 +437,7 @@ describe("GatewayHandler", () => {
         authenticated("http://gateway.test/api/server"),
       );
       expect(await server.json()).toEqual({
-        urls: ["http://gateway.test"],
+        urls: ["https://gateway.example.com"],
         gateway: {
           images: [
             {

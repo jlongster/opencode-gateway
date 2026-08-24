@@ -3,34 +3,34 @@ import { Plugin } from "@opencode-ai/plugin/tui";
 function Commands(props: { context: Plugin.Context }) {
   const server = props.context.client.server.get() as Promise<{
     urls: string[];
-    gateway?: { images?: Array<{ name: string; description: string }> };
   }>;
-  const images = async () => {
-    const connection = await server;
-    return connection.gateway?.images ?? [];
-  };
-  const location = async (name: string) => {
+  const request = async (path: string) => {
     const connection = await server;
     const baseURL = connection.urls[0];
     if (!baseURL) throw new Error("Connected server did not report a URL");
     const password = process.env.OPENCODE_PASSWORD;
-    const response = await fetch(
-      new URL(`/api/gateway/image/${encodeURIComponent(name)}`, baseURL),
-      {
-        headers: password
-          ? { authorization: `Basic ${btoa(`opencode:${password}`)}` }
-          : undefined,
-      },
-    );
+    const response = await fetch(new URL(path, baseURL), {
+      headers: password
+        ? { authorization: `Basic ${btoa(`opencode:${password}`)}` }
+        : undefined,
+    });
     if (!response.ok)
       throw new Error(
         `Gateway request failed: ${response.status} ${await response.text()}`,
       );
-    return (await response.json()) as {
+    return response.json() as Promise<unknown>;
+  };
+  const images = async () =>
+    (
+      (await request("/api/gateway/image")) as {
+        data: Array<{ name: string; description: string }>;
+      }
+    ).data;
+  const location = (name: string) =>
+    request(`/api/gateway/image/${encodeURIComponent(name)}`) as Promise<{
       directory: string;
       workspaceID: string;
-    };
-  };
+    }>;
 
   props.context.keymap.layer(() => ({
     mode: "global",

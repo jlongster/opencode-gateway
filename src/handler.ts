@@ -35,6 +35,7 @@ export interface Options {
   readonly password: string;
   readonly version: string;
   readonly root?: string;
+  readonly externalURL?: string;
 }
 
 export function handle(request: Request, options: Options) {
@@ -51,7 +52,7 @@ export function handle(request: Request, options: Options) {
       const registry = yield* GatewayRegistry.Service;
       const images = yield* registry.listImages;
       return Response.json({
-        urls: [new URL(request.url).origin],
+        urls: [options.externalURL ?? new URL(request.url).origin],
         gateway: {
           images: images.map((image) => ({
             name: image.name,

@@ -88,7 +88,10 @@ export const start = Effect.fn("GatewayProcess.start")(function* (
 });
 
 export function serve<E, R>(
-  options: Pick<Options, "hostname" | "port" | "password" | "version" | "root">,
+  options: Pick<
+    Options,
+    "hostname" | "port" | "password" | "version" | "root" | "externalURL"
+  >,
   services: Layer.Layer<
     | GatewayRegistry.Service
     | GatewayBackend.Service
